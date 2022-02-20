@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 
 import sys
-
-sys.path.append("/opt/arm")
-
 import argparse  # noqa: E402
 import os  # noqa: E402
 import logging  # noqa: E402
@@ -11,26 +8,29 @@ import time  # noqa: E402
 import datetime  # noqa: E402
 import re  # noqa: E402
 import shutil  # noqa: E402
-import pyudev  # noqa: E402
 import getpass  # noqa E402
 import psutil  # noqa E402
 
-from arm.ripper import logger, utils, makemkv, handbrake, identify  # noqa: E402
+import arm
+import logger, utils, makemkv, handbrake, identify  # noqa: E402
+import  fs_utils
+import arm.db as dbutil
+from  arm.db import db
 from arm.config.config import cfg  # noqa: E402
 
-from arm.ripper.getkeys import grabkeys  # noqa: E402
+from getkeys import grabkeys  # noqa: E402
 from arm.models.models import Job, Config  # noqa: E402
-from arm.ui import app, db  # noqa E402
-
+import arm.ui
 NOTIFY_TITLE = "ARM notification"
 PROCESS_COMPLETE = " processing complete. "
 
 
-def entry():
-    """ Entry to program, parses arguments"""
+def parse_args():
+    """ Parse_Args to program, parses arguments"""
     parser = argparse.ArgumentParser(description='Process disc using ARM')
-    parser.add_argument('-d', '--devpath', help='Devpath', required=True)
-
+    parser.add_argument('-d', '--devpath', help='Device path ', required=True)
+    parser.add_argument('-L', dest='log_level', help="log level", default="INFO")
+    parser.add_argument('-c', dest='config_file', help="configuration file")
     return parser.parse_args()
 
 
@@ -38,11 +38,16 @@ def log_udev_params(devpath):
     """log all udev parameters"""
 
     logging.debug("**** Logging udev attributes ****")
-    # logging.info("**** Start udev attributes ****")
-    context = pyudev.Context()
-    device = pyudev.Devices.from_device_file(context, devpath)
-    for key, value in device.items():
-        logging.debug(key + ":" + value)
+    try:
+        import pyudev  # noqa: E402
+        # logging.info("**** Start udev attributes ****")
+        context = pyudev.Context()
+        device = pyudev.Devices.from_device_file(context, '/dev/sr0')
+        for key, value in device.items():
+            logging.debug(key + ":" + value)
+    except Exception:
+        logging.debug("****  pyudev not available ****")
+
     logging.debug("**** End udev attributes ****")
 
 
@@ -70,17 +75,6 @@ def log_arm_params(job):
                      str(cfg.get(key, '<not given>')))
     logging.info("**** End of config parameters ****")
 
-
-def check_fstab():
-    logging.info("Checking for fstab entry.")
-    with open('/etc/fstab', 'r') as f:
-        lines = f.readlines()
-        for line in lines:
-            # Now grabs the real uncommented fstab entry
-            if re.search("^" + job.devpath, line):
-                logging.info("fstab entry is: " + line.rstrip())
-                return
-    logging.error("No fstab entry found.  ARM will likely fail.")
 
 
 def skip_transcode(job, hb_out_path, hb_in_path, mkv_out_path, type_sub_folder):
@@ -182,7 +176,7 @@ def main(logfile, job):
             time.sleep(5)
             sleep_time += 5
             db.session.refresh(job)
-            db.session.refresh(config)
+            db.session.refresh(job.config)
             if job.title_manual:
                 break
         job.status = "active"
@@ -198,7 +192,7 @@ def main(logfile, job):
         logging.info("No manual override found.")
 
     log_arm_params(job)
-    check_fstab()
+    fs_utils.check_fstab()
     grabkeys(cfg["HASHEDKEYS"])
 
     # Entry point for dvd/bluray
@@ -215,7 +209,7 @@ def main(logfile, job):
             hb_out_path = os.path.join(cfg["TRANSCODE_PATH"], str(type_sub_folder), str(job.title))
 
         # The dvd directory already exists - Lets make a new one using random numbers
-        if (utils.make_dir(hb_out_path)) is False:
+        if (fs_utils.make_dir(hb_out_path)) is False:
             logging.info(f"Handbrake Output directory \"{hb_out_path}\" already exists.")
             # Only begin ripping if we are allowed to make duplicates
             # Or the successful rip of the disc is not found in our database
@@ -225,7 +219,7 @@ def main(logfile, job):
                 ts = round(time.time() * 100)
                 hb_out_path = hb_out_path + "_" + str(ts)
 
-                if (utils.make_dir(hb_out_path)) is False:
+                if (fs_utils.make_dir(hb_out_path)) is False:
                     # We failed to make a random directory, most likely a permission issue
                     logging.exception(
                         "A fatal error has occurred and ARM is exiting.  "
@@ -391,11 +385,11 @@ def main(logfile, job):
     elif job.disctype == "data":
         # get filesystem in order
         datapath = os.path.join(cfg["RAW_PATH"], str(job.label))
-        if (utils.make_dir(datapath)) is False:
+        if (fs_utils.make_dir(datapath)) is False:
             ts = str(round(time.time() * 100))
             datapath = os.path.join(cfg["RAW_PATH"], str(job.label) + "_" + ts)
 
-            if (utils.make_dir(datapath)) is False:
+            if (fs_utils.make_dir(datapath)) is False:
                 logging.info(f"Could not create data directory: {datapath}  Exiting ARM. ")
                 sys.exit()
 
@@ -409,14 +403,25 @@ def main(logfile, job):
     else:
         logging.info("Couldn't identify the disc type. Exiting without any action.")
 
+    # job.status = "success"
+    # job.stop_time = datetime.datetime.now()
+    # joblength = job.stop_time - job.start_time
+    # minutes, seconds = divmod(joblength.seconds + joblength.days * 86400, 60)
+    # hours, minutes = divmod(minutes, 60)
+    # len = '{:d}:{:02d}:{:02d}'.format(hours, minutes, seconds)
+    # job.job_length = len
+    # db.session.commit()
 
-if __name__ == "__main__":
-    # Make sure all directories are fully setup
-    utils.arm_setup()
-    args = entry()
+def cli():
+    """ cli entry point """
+    args = parse_args()   
+    if args.config_file:
+        cfg.path = args.config_file
+    arm.ui.configure_app()    
     devpath = "/dev/" + args.devpath
     job = Job(devpath)
-    logfile = logger.setup_logging(job)
+    logfile = logger.setuplogging(job, level=args.log_level)
+
     if utils.get_cdrom_status(devpath) != 4:
         logging.info("Drive appears to be empty or is not ready.  Exiting ARM.")
         sys.exit()
@@ -433,10 +438,10 @@ if __name__ == "__main__":
                 logging.error(f"Job already running on {devpath}")
                 sys.exit(1)
 
-    logging.info(f"Starting ARM processing at {datetime.datetime.now()}")
+    logging.info("Starting ARM processing at %s", datetime.datetime.now())
 
-    utils.check_db_version(cfg['INSTALLPATH'], cfg['DBFILE'])
-
+    dbutil.check_db_version(cfg['INSTALLPATH'], cfg['DBFILE'], arm.ui.app)
+    
     # put in db
     job.status = "active"
     job.start_time = datetime.datetime.now()
@@ -447,8 +452,7 @@ if __name__ == "__main__":
     utils.database_adder(config)
 
     # Log version number
-    with open(os.path.join(cfg["INSTALLPATH"], 'VERSION')) as version_file:
-        version = version_file.read().strip()
+    version = arm.__version__
     logging.info(f"ARM version: {version}")
     job.arm_version = version
     logging.info(("Python version: " + sys.version).replace('\n', ""))
@@ -476,3 +480,6 @@ if __name__ == "__main__":
         total_len = '{:d}:{:02d}:{:02d}'.format(hours, minutes, seconds)
         job.job_length = total_len
         db.session.commit()
+
+if __name__ == "__main__":
+    cli()

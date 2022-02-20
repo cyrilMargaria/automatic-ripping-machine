@@ -6,7 +6,7 @@ import logging
 import time
 
 from arm.ripper import music_brainz
-from arm.ui import db
+from arm.db import db
 from arm.config.config import cfg
 from flask_login import LoginManager, current_user, login_user, UserMixin  # noqa: F401
 from prettytable import PrettyTable
@@ -14,6 +14,8 @@ from prettytable import PrettyTable
 hidden_attribs = ("OMDB_API_KEY", "EMBY_USERID", "EMBY_PASSWORD", "EMBY_API_KEY", "PB_KEY", "IFTTT_KEY", "PO_KEY",
                   "PO_USER_KEY", "PO_APP_KEY", "ARM_API_KEY", "TMDB_API_KEY")
 HIDDEN_VALUE = "<hidden>"
+import platform
+from arm.ripper import fs_utils
 
 
 class Job(db.Model):
@@ -59,47 +61,28 @@ class Job(db.Model):
     def __init__(self, devpath):
         """Return a disc object"""
         self.devpath = devpath
-        self.mountpoint = "/mnt" + devpath
+        self.label = ""
         self.hasnicetitle = False
         self.video_type = "unknown"
         self.ejected = False
         self.updated = False
+        self.logger = None
         if cfg['VIDEOTYPE'] != "auto":
             self.video_type = cfg['VIDEOTYPE']
-        self.parse_udev()
-        self.get_pid()
-
+        self.mountpoint, self.label, self.disctype = fs_utils.get_device_info(self.devpath)
+        self.get_pid()        
         if self.disctype == "dvd" and not self.label:
             logging.info("No disk label Available. Trying lsdvd")
             command = f"lsdvd {devpath} | grep 'Disc Title' | cut -d ' ' -f 3-"
             lsdvdlbl = str(subprocess.check_output(command, shell=True).strip(), 'utf-8')
-            self.label = lsdvdlbl
-
-    def parse_udev(self):
-        """Parse udev for properties of current disc"""
-        context = pyudev.Context()
-        device = pyudev.Devices.from_device_file(context, self.devpath)
-        self.disctype = "unknown"
-
-        for key, value in device.items():
-            if key == "ID_FS_LABEL":
-                self.label = value
-                if value == "iso9660":
-                    self.disctype = "data"
-            elif key == "ID_CDROM_MEDIA_BD":
-                self.disctype = "bluray"
-            elif key == "ID_CDROM_MEDIA_DVD":
-                self.disctype = "dvd"
-            elif key == "ID_CDROM_MEDIA_TRACK_COUNT_AUDIO":
-                self.disctype = "music"
-            else:
-                pass
+            self.label = lsdvdlbl    
 
     def get_pid(self):
+        """ return current pid """
         pid = os.getpid()
-        p = psutil.Process(pid)
+        proc = psutil.Process(pid)
         self.pid = pid
-        self.pid_hash = hash(p)
+        self.pid_hash = hash(proc)
 
     def get_disc_type(self, found_hvdvd_ts):
         if self.disctype == "music":
@@ -137,24 +120,17 @@ class Job(db.Model):
         mb_title = music_brainz.get_title(disc_id, self)
         if mb_title == "not identified":
             self.label = self.title = "not identified"
-            logfile = "music_cd.log"
-            new_log_file = f"music_cd_{round(time.time() * 100)}.log"
+            logfile = "music_cd"
         else:
-            logfile = f"{mb_title}.log"
-            new_log_file = f"{mb_title}_{round(time.time() * 100)}.log"
-
-        temp_log_full = os.path.join(cfg['LOGPATH'], logfile)
-        logfile = new_log_file if os.path.isfile(temp_log_full) else logfile
+            logfile = mb_title
         return logfile
 
     def __str__(self):
         """Returns a string of the object"""
-
-        s = self.__class__.__name__ + ": "
+        result = self.__class__.__name__ + ": "
         for attr, value in self.__dict__.items():
-            s = s + "(" + str(attr) + "=" + str(value) + ") "
-
-        return s
+            result = result + "(" + str(attr) + "=" + str(value) + ") "
+        return result
 
     def pretty_table(self):
         """Returns a string of the prettytable"""
@@ -180,21 +156,11 @@ class Job(db.Model):
 
     def eject(self):
         """Eject disc if it hasn't previously been ejected"""
-        if not self.ejected:
-            self.ejected = True
-            try:
-                if os.system("umount " + self.devpath):
-                    logging.debug("we unmounted disc" + self.devpath)
-                if os.system("eject " + self.devpath):
-                    logging.debug("we ejected disc" + self.devpath)
-                    self.ejected = True
-                else:
-                    logging.debug("failed to eject" + self.devpath)
-            except Exception as e:
-                logging.debug(self.devpath + " couldn't be ejected " + str(e))
+        self.ejected = fs_utils.eject_device(self.devpath)
 
 
 class Track(db.Model):
+    """ represents a track """
     track_id = db.Column(db.Integer, primary_key=True)
     job_id = db.Column(db.Integer, db.ForeignKey('job.job_id'))
     track_number = db.Column(db.String(4))
@@ -301,6 +267,18 @@ class Config(db.Model):
 
         return s
 
+    def __getitem__(self, item):
+        """ allows to acces the parameters with [] (for notification)"""
+        if hasattr(self, item):
+            return getattr(self, item)
+        raise KeyError()
+
+    def get(self, item, default=None):
+        """ allows to acces the parameters with get (for notification)"""
+        if hasattr(self, item):
+            return getattr(self, item)
+        return default
+    
     def __str__(self):
         """Returns a string of the object"""
         s = self.__class__.__name__ + ": "

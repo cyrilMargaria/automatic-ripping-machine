@@ -8,7 +8,6 @@ import json
 import re
 import psutil
 import requests
-import bcrypt  # noqa: F401
 import html
 import yaml
 
@@ -51,88 +50,6 @@ def database_updater(args, job, wait_time=90):
         else:
             app.logger.debug("successfully written to the database")
             return True
-
-
-def check_db_version(install_path, db_file):
-    """
-    Check if db exists and is up to date.
-    If it doesn't exist create it.  If it's out of date update it.
-    """
-    from alembic.script import ScriptDirectory
-    from alembic.config import Config
-    import sqlite3
-    import flask_migrate
-
-    mig_dir = os.path.join(install_path, "arm/migrations")
-
-    config = Config()
-    config.set_main_option("script_location", mig_dir)
-    script = ScriptDirectory.from_config(config)
-
-    # create db file if it doesn't exist
-    if not os.path.isfile(db_file):
-        app.logger.info("No database found.  Initializing arm.db...")
-        make_dir(os.path.dirname(db_file))
-        with app.app_context():
-            flask_migrate.upgrade(mig_dir)
-
-        if not os.path.isfile(db_file):
-            app.logger.debug("Can't create database file.  This could be a permissions issue.  Exiting...")
-
-    # check to see if db is at current revision
-    head_revision = script.get_current_head()
-    app.logger.debug("Head is: " + head_revision)
-
-    conn = sqlite3.connect(db_file)
-    c = conn.cursor()
-
-    c.execute("SELECT {cn} FROM {tn}".format(cn="version_num", tn="alembic_version"))
-    db_version = c.fetchone()[0]
-    app.logger.debug("Database version is: " + db_version)
-    if head_revision == db_version:
-        app.logger.info("Database is up to date")
-    else:
-        app.logger.info(
-            "Database out of date. Head is " + head_revision + " and database is " + db_version
-            + ".  Upgrading database...")
-        with app.app_context():
-            ts = round(time() * 100)
-            app.logger.info("Backuping up database '" + db_file + "' to '" + db_file + str(ts) + "'.")
-            shutil.copy(db_file, db_file + "_" + str(ts))
-            flask_migrate.upgrade(mig_dir)
-        app.logger.info("Upgrade complete.  Validating version level...")
-
-        c.execute("SELECT {cn} FROM {tn}".format(tn="alembic_version", cn="version_num"))
-        db_version = c.fetchone()[0]
-        app.logger.debug("Database version is: " + db_version)
-        if head_revision == db_version:
-            app.logger.info("Database is now up to date")
-        else:
-            app.logger.error(
-                "Database is still out of date. Head is " + head_revision + " and database is " + db_version
-                + ".  Exiting arm.")
-            # sys.exit()
-
-
-def make_dir(path):
-    """
-    Make a directory\n
-    path = Path to directory\n
-
-    returns success True if successful
-        false if the directory already exists
-    """
-    if not os.path.exists(path):
-        app.logger.debug("Creating directory: " + path)
-        try:
-            os.makedirs(path)
-            return True
-        except OSError:
-            err = "Couldn't create a directory at path: " + path + " Probably a permissions error.  Exiting"
-            app.logger.error(err)
-    else:
-        return False
-
 
 def get_info(directory):
     file_list = []

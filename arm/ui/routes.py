@@ -13,7 +13,10 @@ import arm.ui.utils as utils
 from time import sleep
 from flask import Flask, render_template, request, send_file, flash, \
     redirect, url_for  # noqa: F401
-from arm.ui import app, db
+from arm.ui import app
+from arm.db import db
+import arm.db 
+
 from arm.models.models import Job, Config, Track, User, AlembicVersion, UISettings  # noqa: F401
 from arm.config.config import cfg
 from arm.ui.forms import TitleSearchForm, ChangeParamsForm, CustomTitleForm, SettingsForm, UiSettingsForm, SetupForm
@@ -677,7 +680,7 @@ def home():
     The main homepage showing current rips and server stats
     """
     # Force a db update
-    utils.check_db_version(cfg['INSTALLPATH'], cfg['DBFILE'])
+    arm.db.check_db_version(cfg['INSTALLPATH'], cfg['DBFILE'], app)
 
     # Hard drive space
     try:
@@ -719,9 +722,8 @@ def home():
     try:
         temps = psutil.sensors_temperatures()
         temp = temps['coretemp'][0][1]
-    except KeyError:
+    except (KeyError,AttributeError):
         temp = temps = None
-
     if os.path.isfile(cfg['DBFILE']):
         try:
             jobs = db.session.query(Job).filter(Job.status.notin_(['fail', 'success'])).all()

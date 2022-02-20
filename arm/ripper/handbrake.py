@@ -23,7 +23,6 @@ def handbrake_mainfeature(srcpath, basepath, logfile, job):
     """process dvd with mainfeature enabled.\n
     srcpath = Path to source for HB (dvd or files)\n
     basepath = Path where HB will save trancoded files\n
-    logfile = Logfile for HB to redirect output to\n
     job = Job object\n
 
     Returns nothing
@@ -93,7 +92,6 @@ def handbrake_all(srcpath, basepath, logfile, job):
     """Process all titles on the dvd\n
     srcpath = Path to source for HB (dvd or files)\n
     basepath = Path where HB will save trancoded files\n
-    logfile = Logfile for HB to redirect output to\n
     job = Disc object\n
 
     Returns nothing

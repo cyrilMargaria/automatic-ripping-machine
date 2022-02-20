@@ -1,0 +1,2 @@
+global-exclude *.py[cod]
+graft arm/ui/* 

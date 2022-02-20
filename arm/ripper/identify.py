@@ -12,13 +12,13 @@ import unicodedata
 import xmltodict
 import json
 
-from arm.ripper import utils
+import utils
+import fs_utils
+
 from arm.ui import db
 from arm.config.config import cfg
 
 # flake8: noqa: W605
-# from arm.ui.utils import call_omdb_api, tmdb_search
-import arm.ui.utils as u
 
 
 def identify(job, logfile):
@@ -30,15 +30,14 @@ def identify(job, logfile):
     if not os.path.exists(str(job.mountpoint)):
         os.makedirs(str(job.mountpoint))
 
-    os.system("mount " + job.devpath)
+    fs_utils.mount_device(job.devpath)
+
 
     # Check with the job class to get the correct disc type
     job.get_disc_type(utils.find_file("HVDVD_TS", job.mountpoint))
 
     if job.disctype in ["dvd", "bluray"]:
-
         logging.info("Disc identified as video")
-
         if cfg["GET_VIDEO_TITLE"]:
             res = False
             if job.disctype == "dvd":
@@ -55,7 +54,7 @@ def identify(job, logfile):
                          f"disctype: {job.disctype}")
             logging.debug(f"identify.job.end ---- \n\r{job.pretty_table()}")
 
-    os.system("umount " + job.devpath)
+    fs_utils.unmount_device(job.devpath)
 
 
 def clean_for_filename(string):
@@ -239,15 +238,18 @@ def metadata_selector(job, title=None, year=None):
     Args:
         job:
     """
+    
     if cfg['METADATA_PROVIDER'].lower() == "tmdb":
+        import arm.ui.utils as ui_utils
         logging.debug("provider tmdb")
-        x = u.tmdb_search(title, year)
+        x = ui_utils.tmdb_search(title, year)
         if x is not None:
             update_job(job, x)
         return x
     elif cfg['METADATA_PROVIDER'].lower() == "omdb":
+        import arm.ui.utils as ui_utils
         logging.debug("provider omdb")
-        x = u.call_omdb_api(str(title), str(year))
+        x = ui_utils.call_omdb_api(str(title), str(year))
         if x is not None:
             update_job(job, x)
         return x

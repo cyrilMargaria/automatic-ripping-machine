@@ -3,51 +3,92 @@
 # set up logging
 
 import os
+import os.path
 import logging
+import logging.handlers
+import sys
 import time
 
 from arm.config.config import cfg
 
 
-def setup_logging(job):
-    """Setup logging and return the path to the logfile for
-    redirection of external calls
-    We need to return the full logfile path but set the job.logfile to just the filename
-    """
-    # This isn't catching all of them
+def setuplogging(job, level=None):
+    """Setup logging and return the logger. """
+    # return a logger, so all logs are logged through a logger
+
+    # Support different destination
+    destination = cfg.get("LOGDEST", "FILE")
+    log_level = cfg['LOGLEVEL']
+    if level:
+        log_level = level
+    # normalize  cfg['LOGPATH'] (will be used only if destination is FILE
+    logPath = cfg['LOGPATH']
+    while logPath and logPath[-1] == "/":
+        logPath = logPath[:-1]
+
+    # setup helpful information for the log,
+    # This isnt catching all of them
+    # logbase is the log file name without the.log
+    logbase = "empty"
     if job.label == "" or job.label is None:
         if job.disctype == "music":
-            logfile = job.logfile = job.identify_audio_cd()
+            logbase =  job.identify_audio_cd()
+    else:
+        logbase = job.label
+        # We need to give the logfile only to database
+    # default to stdout
+    log_handler = logging.StreamHandler(stream=sys.stdout)
+    if destination == "FILE":        
+        # Make the log dir if it doesnt exist
+        if not os.path.exists(logPath):
+            os.makedirs(logPath)
+        # unique filename 
+        if os.path.isfile(os.path.join(logPath, "{}.log".format(logbase))):
+            # log already exist, generate an unique one
+            logbase = str(job.label) + "_" + str(round(time.time() * 100))
+        logfile = "{}.log".format(logbase)
+        logfull = os.path.join(logPath, logfile)
+        log_handler = logging.FileHandler(logfull)
+    elif destination == "SYSLOG":
+        log_handler = logging.handlers.SysLogHandler(address='/dev/log')
+        # TODO: named pipe
+        logfile = "/dev/null"
+    elif destination.startswith("udp://"):
+        destination = destination[len("udp://"):]
+        tupl = destination.split(":")
+        if len(tupl) > 1:
+            tupl = (tupl[0], int(tupl[1]))
         else:
-            logfile = "empty.log"
-        # set a logfull for empty.log and music_cd.log
-        logfull = os.path.join(cfg['LOGPATH'], logfile)
+            tupl = (destination, 514)
+        log_handler = logging.handlers.SysLogHandler(address=tupl)
+        logfile = "/dev/null"
+    elif destination.startswith("stdout"):
+        # its already the case
+        logfile = "1"        
+        pass
+    elif destination.startswith("stderr"):
+        log_handler = logging.StreamHandler(stream=sys.stderr)
+        logfile = "2"        
     else:
-        logfile = job.label + ".log"
-        new_log_file = f"{job.label}_{round(time.time() * 100)}.log"
-        temp_log_full = os.path.join(cfg['LOGPATH'], logfile)
-        logfile = new_log_file if os.path.isfile(temp_log_full) else logfile
-        # If log already exist use the new_log_file
-        logfull = os.path.join(cfg['LOGPATH'], new_log_file) if os.path.isfile(temp_log_full) \
-            else os.path.join(cfg['LOGPATH'], str(job.label) + ".log")
-        job.logfile = logfile
+        # suppose a file
+        log_handler = logging.FileHandler(destination)
+        logfile = "destination"
 
-    # Debug formatting
-    if cfg['LOGLEVEL'] == "DEBUG":
-        logging.basicConfig(filename=logfull, format='[%(asctime)s] %(levelname)s '
-                                                     'ARM: %(module)s.%(funcName)s %(message)s',
-                            datefmt=cfg['DATE_FORMAT'], level=cfg['LOGLEVEL'])
-    else:
-        logging.basicConfig(filename=logfull, format='[%(asctime)s] %(levelname)s ARM: %(message)s',
-                            datefmt=cfg['DATE_FORMAT'], level=cfg['LOGLEVEL'])
+    fmt = '[%(asctime)s] %(levelname)s ARM[{}]: %(message)s'.format(logbase)
+    if log_level == "DEBUG":
+        fmt = '[%(asctime)s] %(levelname)s ARM[{}]: %(module)s.%(funcName)s %(message)s'.format(logbase)
 
+    
+    job.logfile = logfile
+    logging.basicConfig(format=fmt, handlers=[log_handler], datefmt='%Y-%m-%d %H:%M:%S', level=log_level)
+    result = logging.getLogger("arm")
     # This stops apprise spitting our secret keys when users posts online
     logging.getLogger("apprise").setLevel(logging.WARN)
     logging.getLogger("requests").setLevel(logging.WARN)
     logging.getLogger("urllib3").setLevel(logging.WARN)
 
     # Return the full logfile location to the logs
-    return logfull
+    return logfile
 
 
 def clean_up_logs(logpath, loglife):
@@ -61,7 +102,8 @@ def clean_up_logs(logpath, loglife):
         return False
     now = time.time()
     logging.info(f"Looking for log files older than {loglife} days old.")
-
+    if not os.path.exists(logpath):
+        return
     for filename in os.listdir(logpath):
         fullname = os.path.join(logpath, filename)
         if fullname.endswith(".log") and os.stat(fullname).st_mtime < now - loglife * 86400:
