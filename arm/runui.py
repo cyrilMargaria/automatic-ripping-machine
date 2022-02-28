@@ -25,7 +25,7 @@ def main():
     args = parser.parse_args()
     env_cfg = os.getenv("ARM_CONFIG_FILE", args.config_file)
     if env_cfg:
-        cfg.path = args.config_file.format(node_label=args.node_label, hostname=platform.node())
+        cfg.path = args.config_file.format(hostname=platform.node())
     host = args.ip    
     if not host:
         host, _ = webserver_ip_hostname()       
