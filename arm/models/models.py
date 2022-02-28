@@ -48,7 +48,8 @@ class Job(db.Model):
     poster_url_auto = db.Column(db.String(256))
     poster_url_manual = db.Column(db.String(256))
     devpath = db.Column(db.String(15))
-    mountpoint = db.Column(db.String(20))
+    # Some OS have the title in it, 
+    mountpoint = db.Column(db.String(256))
     hasnicetitle = db.Column(db.Boolean)
     errors = db.Column(db.Text)
     disctype = db.Column(db.String(20))  # dvd/bluray/data/music/unknown
