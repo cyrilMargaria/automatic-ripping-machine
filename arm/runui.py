@@ -3,20 +3,29 @@
 import os  # noqa: F401
 import sys
 import argparse
+import platform
 
 from arm.ui import app, configure_app  # noqa E402
 from arm.config.config import cfg, webserver_ip_hostname  # noqa E402
 import arm.ui.routes  # noqa E402
 
 def main():
-    parser = argparse.ArgumentParser(description='Process disc using ARM')
+    parser = argparse.ArgumentParser(description='ARM management webserver')
     parser.add_argument('-L', dest='log_level', help="log level", default="INFO")
-    parser.add_argument('-c', dest='config_file', help="configuration file")
+    parser.add_argument('-c', dest='config_file', help="""
+      configuration file, can be also set in environment var ARM_CONFIG_FILE. 
+      The value can be a file or an url and contain
+      the following variables:
+        - hostname : node hostname (here {hostname})
+      for instance: http://cfgs.example.net/configs/{{hostname}}.yml
+      """.format(hostname=platform.node()))
     parser.add_argument('-p', dest='port', help="port")
     parser.add_argument('-i', dest='ip', help="ip to bind")
+
     args = parser.parse_args()
-    if args.config_file:
-        cfg.path = args.config_file
+    env_cfg = os.getenv("ARM_CONFIG_FILE", args.config_file)
+    if env_cfg:
+        cfg.path = args.config_file.format(node_label=args.node_label, hostname=platform.node())
     host = args.ip    
     if not host:
         host, _ = webserver_ip_hostname()       

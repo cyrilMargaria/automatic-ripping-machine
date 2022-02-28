@@ -30,7 +30,14 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Process disc using ARM')
     parser.add_argument('-d', '--devpath', help='Device path ', required=True)
     parser.add_argument('-L', dest='log_level', help="log level", default="INFO")
-    parser.add_argument('-c', dest='config_file', help="configuration file")
+    parser.add_argument('-c', dest='config_file', help="""
+       configuration file, can be also set in environment var ARM_CONFIG_FILE.
+       The value can be a file or an url and contain
+       the following variables:
+        - hostname : node hostname (here {hostname})
+        - devpath
+      for instance: http://cfgs.example.net/configs/{{hostname}}.yml
+      """.format(hostname=platform.node()))
     return parser.parse_args()
 
 
@@ -328,7 +335,7 @@ def main(logfile, job):
                     utils.move_files(hb_out_path, track.filename, job, True)
                 else:
                     utils.move_files(hb_out_path, track.filename, job, track.main_feature)
-
+                track.write_metadata(final_directory)
         # move movie poster
         src_poster = os.path.join(hb_out_path, "poster.png")
         dst_poster = os.path.join(final_directory, "poster.png")
@@ -343,11 +350,16 @@ def main(logfile, job):
 
         utils.scan_emby(job)
         utils.set_permissions(job, final_directory)
-
+        job.write_metadata(final_directory)
         # Clean up bluray backup
         if cfg["DELRAWFILES"]:
             raw_list = [mkvoutpath, hb_out_path, hb_in_path]
             for raw_folder in raw_list:
+                if not raw_folder:
+                    continue
+                # if in path is the devpath
+                if raw_folder == job.devpath:
+                    continue
                 try:
                     logging.info(f"Removing raw path - {raw_folder}")
                     if raw_folder != final_directory:
@@ -368,7 +380,7 @@ def main(logfile, job):
                 logging.info(f"Transcoding completed with errors.  Title(s) {errlist} failed to complete. ")
             else:
                 utils.notify(job, NOTIFY_TITLE, str(job.title) + PROCESS_COMPLETE)
-
+        job.eject()
         logging.info("ARM processing complete")
 
     elif job.disctype == "music":
@@ -378,6 +390,7 @@ def main(logfile, job):
             # This shouldnt be needed. but to be safe
             job.status = "success"
             dbutil.commit()
+            job.eject()
         else:
             logging.info("Music rip failed.  See previous errors.  Exiting. ")
             job.eject()
@@ -397,10 +410,9 @@ def main(logfile, job):
 
         if utils.rip_data(job, datapath, logfile):
             utils.notify(job, NOTIFY_TITLE, f"Data disc: {job.label} copying complete. ")
-            job.eject()
         else:
             logging.info("Data rip failed.  See previous errors.  Exiting.")
-            job.eject()
+        job.eject()
 
     else:
         logging.info("Couldn't identify the disc type. Exiting without any action.")
@@ -416,9 +428,10 @@ def main(logfile, job):
 
 def cli():
     """ cli entry point """
-    args = parse_args()   
-    if args.config_file:
-        cfg.path = args.config_file
+    args = parse_args()
+    env_cfg = os.getenv("ARM_CONFIG_FILE", args.config_file)
+    if env_cfg:
+        cfg.path = args.config_file.format(hostname=platform.node(), devpath=args.devpath)
     arm.ui.configure_app()    
     devpath = "/dev/" + args.devpath
     job = Job(devpath)

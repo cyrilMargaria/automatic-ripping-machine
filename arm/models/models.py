@@ -4,6 +4,8 @@ import pyudev
 import psutil
 import logging
 import time
+import json
+import os.path
 
 from arm.ripper import music_brainz
 from arm.db import db
@@ -17,6 +19,7 @@ HIDDEN_VALUE = "<hidden>"
 import platform
 from arm.ripper import fs_utils
 
+logger = logging.getLogger("arm")
 
 class Job(db.Model):
     job_id = db.Column(db.Integer, primary_key=True)
@@ -161,8 +164,26 @@ class Job(db.Model):
 
     def eject(self):
         """Eject disc if it hasn't previously been ejected"""
-        self.ejected = fs_utils.eject_device(self.devpath)
-
+        self.ejected = bool(fs_utils.eject_device(self.devpath))
+        
+    def write_metadata(self, destination):
+        """ Write metadata to file and to the file(s) themselves"""
+        try:
+            f = open(os.path.join(destination, "metadata.json"), "w")
+            metadata = {}
+            # filter selected attribute and only set attribute with value
+            for att in ["no_of_titles", "title", "title_auto", "title_manual",
+                        "year", "year_auto", "year_manual", "video_type", "video_type_auto",
+                        "video_type_manual", "imdb_id", "imdb_id_auto", "imdb_id_manual",
+                        "poster_url", "poster_url_auto", "poster_url_manual",
+                        "label", "crc_id", "disctype"]:
+                data = getattr(self, att)
+                if data:
+                    metadata[att] = data
+            json.dump(metadata, f, indent=2)
+        except Exception as e:
+            logger.warning("Could not write %s metadata: %s", job.label, e)
+        pass
 
 class Track(db.Model):
     """ represents a track """
@@ -197,6 +218,10 @@ class Track(db.Model):
 
     def __repr__(self):
         return '<Post {}>'.format(self.track_number)
+    
+    def write_metadata(self, destination):
+        """ Write metadata to file and to the file(s) themselves"""
+        pass
 
 
 class Config(db.Model):
