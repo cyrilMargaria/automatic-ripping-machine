@@ -11,7 +11,7 @@ import shlex
 import time  # noqa: F401
 import datetime  # noqa: F401
 import psutil  # noqa: F401
-
+import arm.db
 from arm.ripper import utils
 from arm.ui import app, db  # noqa E402
 from arm.config.config import cfg
@@ -49,7 +49,7 @@ def handbrake_mainfeature(srcpath, basepath, logfile, job):
         raise RuntimeError(msg)
 
     track.filename = track.orig_filename = filename
-    db.session.commit()
+    arm.db.commit()
 
     if job.disctype == "dvd":
         hb_args = cfg["HB_ARGS_DVD"]
@@ -79,13 +79,13 @@ def handbrake_mainfeature(srcpath, basepath, logfile, job):
         track.status = "fail"
         track.error = err
         job.status = "fail"
-        db.session.commit()
+        arm.db.commit()
         sys.exit(err)
 
     logging.info(PROCESS_COMPLETE)
     logging.debug("\n\r" + job.pretty_table())
     track.ripped = True
-    db.session.commit()
+    arm.db.commit()
 
 
 def handbrake_all(srcpath, basepath, logfile, job):
@@ -99,10 +99,10 @@ def handbrake_all(srcpath, basepath, logfile, job):
 
     # Wait until there is a spot to transcode
     job.status = "waiting_transcode"
-    db.session.commit()
+    arm.db.commit()
     utils.sleep_check_process("HandBrakeCLI", int(cfg["MAX_CONCURRENT_TRANSCODES"]))
     job.status = "transcoding"
-    db.session.commit()
+    arm.db.commit()
     logging.info("Starting BluRay/DVD transcoding - All titles")
 
     if job.disctype == "dvd":
@@ -137,7 +137,7 @@ def handbrake_all(srcpath, basepath, logfile, job):
             logging.info(f"Transcoding title {track.track_number} to {shlex.quote(filepathname)}")
 
             track.filename = track.orig_filename = filename
-            db.session.commit()
+            arm.db.commit()
 
             cmd = 'nice {0} -i {1} -o {2} --preset "{3}" -t {4} {5}>> {6} 2>&1'.format(
                 cfg["HANDBRAKE_CLI"],
@@ -166,7 +166,7 @@ def handbrake_all(srcpath, basepath, logfile, job):
                 track.error = err
 
             track.ripped = True
-            db.session.commit()
+            arm.db.commit()
 
     logging.info(PROCESS_COMPLETE)
     logging.debug("\n\r" + job.pretty_table())
@@ -183,10 +183,10 @@ def handbrake_mkv(srcpath, basepath, logfile, job):
     """
     # Added to limit number of transcodes
     job.status = "waiting_transcode"
-    db.session.commit()
+    arm.db.commit()
     utils.sleep_check_process("HandBrakeCLI", int(cfg["MAX_CONCURRENT_TRANSCODES"]))
     job.status = "transcoding"
-    db.session.commit()
+    arm.db.commit()
     if job.disctype == "dvd":
         hb_args = cfg["HB_ARGS_DVD"]
         hb_preset = cfg["HB_PRESET_DVD"]
@@ -292,7 +292,7 @@ def get_track_info(srcpath, job):
                 logging.debug(f"Line found is: {line}")
                 logging.info(f"Found {titles} titles")
                 job.no_of_titles = titles
-                db.session.commit()
+                arm.db.commit()
 
         if (re.search(t_pattern, line)) is not None:
             if t_no == 0:

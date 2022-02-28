@@ -12,9 +12,9 @@ import unicodedata
 import xmltodict
 import json
 
-import utils
-import fs_utils
-
+import arm.ripper.utils as utils
+import arm.ripper.fs_utils as fs_utils
+import arm.db
 from arm.ui import db
 from arm.config.config import cfg
 
@@ -48,7 +48,7 @@ def identify(job, logfile):
                 get_video_details(job)
             else:
                 job.hasnicetitle = False
-                db.session.commit()
+                arm.db.commit()
 
             logging.info(f"Disc title Post ident -  title:{job.title} year:{job.year} video_type:{job.video_type} "
                          f"disctype: {job.disctype}")
@@ -81,7 +81,7 @@ def identify_bluray(job):
         # Maybe call OMdb with label when we cant find any ident on disc ?
         job.title = str(job.label)
         job.year = ""
-        db.session.commit()
+        arm.db.commit()
         return False
 
     try:
@@ -106,7 +106,7 @@ def identify_bluray(job):
 
     job.title = job.title_auto = bluray_title
     job.year = job.year_auto = bluray_year
-    db.session.commit()
+    arm.db.commit()
 
     return True
 
@@ -116,8 +116,8 @@ def identify_dvd(job):
     lookup the title """
 
     logging.debug("\n\r" + job.pretty_table())
-    # Some older DVDs aren't actually labelled
-    if not job.label or job.label == "":
+    # Some older DVDs aren't actually labelled (or labeled dvd)
+    if not job.label or job.label == "" or job.label.lower() == 'dvd':
         job.label = "not identified"
     try:
         crc64 = pydvdid.compute(str(job.mountpoint))
@@ -129,11 +129,15 @@ def identify_dvd(job):
         logging.debug(urlstring)
         dvd_info_xml = urllib.request.urlopen(urlstring).read()
         x = json.loads(dvd_info_xml)
-        logging.debug("dvd xml - " + str(x))
+        logging.debug("dvd xml - %s",x)
         logging.debug(f"results = {x['results']}")
         if x['success']:
             logging.info("Found crc64 id from online API")
             logging.info(f"title is {x['results']['0']['title']}")
+            result = x['results']['0']
+            for tr in [('year',4), ('video_type', 20), ('imdb_id', 15)]:
+                if result.get(tr[0]):
+                    result[tr[0]] = result[tr[0]][:tr[1]]
             args = {
                 'title': x['results']['0']['title'],
                 'title_auto': x['results']['0']['title'],
@@ -144,6 +148,7 @@ def identify_dvd(job):
                 'video_type': x['results']['0']['video_type'],
                 'video_type_auto': x['results']['0']['video_type'],
             }
+                
             utils.database_updater(args, job)
             # return True
     except Exception as e:
@@ -200,25 +205,31 @@ def get_video_details(job):
 
     identify_loop(job, None, title, year)
 
-
 def update_job(job, s):
     logging.debug(f"s =======  {s}")
-    if 'Search' not in s:
+    if 'Search' not in s or not s['Search'] or not s['Search'][0]:
         return None
-    new_year = s['Search'][0]['Year']
-    title = clean_for_filename(s['Search'][0]['Title'])
+    data = s['Search'][0]
+    new_year = data['Year']
+    title = clean_for_filename(data['Title'])
     logging.debug("Webservice successful.  New title is " + title + ".  New Year is: " + new_year)
+    # ensure string and data len(for the database)
+    def truncate(v, l):
+        if not data.get(v):
+            return  data.get(v)
+        return str(data.get(v)[:l])
+    
     args = {
-        'year_auto': str(new_year),
-        'year': str(new_year),
+        'year_auto': truncate('Year', 4),
+        'year': truncate('Year', 4),
         'title_auto': title,
         'title': title,
-        'video_type_auto': s['Search'][0]['Type'],
-        'video_type': s['Search'][0]['Type'],
-        'imdb_id_auto': s['Search'][0]['imdbID'],
-        'imdb_id': s['Search'][0]['imdbID'],
-        'poster_url_auto': s['Search'][0]['Poster'],
-        'poster_url': s['Search'][0]['Poster'],
+        'video_type_auto': truncate('Type', 20),
+        'video_type': truncate('Type', 20),
+        'imdb_id_auto': truncate('imdbID', 15),
+        'imdb_id': truncate('imdbID', 15),
+        'poster_url_auto': data['Poster'],
+        'poster_url': data['Poster'],
         'hasnicetitle': True
     }
     utils.database_updater(args, job)

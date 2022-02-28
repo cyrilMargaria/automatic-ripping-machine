@@ -14,7 +14,7 @@ import yaml
 from pathlib import Path
 from arm.config.config import cfg
 from flask.logging import default_handler  # noqa: F401
-
+import arm.db as dbutil
 from arm.ui import app, db
 from arm.models.models import Job, Config, Track, User, AlembicVersion, UISettings  # noqa: F401
 from flask import Flask, render_template, flash, request  # noqa: F401
@@ -39,7 +39,7 @@ def database_updater(args, job, wait_time=90):
         app.logger.debug(str(key) + "= " + str(value))
     for i in range(wait_time):  # give up after the users wait period in seconds
         try:
-            db.session.commit()
+            dbutil.commit()
         except Exception as e:
             if "locked" in str(e):
                 time.sleep(1)
@@ -173,7 +173,7 @@ def abandon_job(job_id):
     try:
         job = Job.query.get(job_id)
         job.status = "fail"
-        db.session.commit()
+        dbutil.commit()
         app.logger.debug("Job {} was abandoned successfully".format(job_id))
         t = {'success': True, 'job': job_id, 'mode': 'abandon'}
         job.eject()
@@ -208,7 +208,7 @@ def delete_job(job_id, mode):
                 # Track.query.delete()
                 # Job.query.delete()
                 # Config.query.delete()
-                # db.session.commit()
+                # dbutil.commit()
                 app.logger.debug("Admin is requesting to delete all jobs from database!!! No deletes went to db")
                 t = {'success': True, 'job': job_id, 'mode': mode}
             elif job_id == "title":
@@ -217,7 +217,7 @@ def delete_job(job_id, mode):
                 # This causes db corruption!
                 # logfile = request.args['title']
                 # Job.query.filter_by(title=logfile).delete()
-                # db.session.commit()
+                # dbutil.commit()
                 # app.logger.debug("Admin is requesting to delete all jobs with (x) title.")
                 t = {'success': True, 'job': job_id, 'mode': mode}
                 # Not sure this is the greatest way of handling this
@@ -231,9 +231,9 @@ def delete_job(job_id, mode):
                 else:
                     app.logger.debug("No errors: job_id=" + str(post_value))
                     Track.query.filter_by(job_id=job_id).delete()
+                    Config.query.filter_by(job_id=job_id).delete()                    
                     Job.query.filter_by(job_id=job_id).delete()
-                    Config.query.filter_by(job_id=job_id).delete()
-                    db.session.commit()
+                    dbutil.commit()
                     app.logger.debug("Admin deleting  job {} was successful")
                     t = {'success': True, 'job': job_id, 'mode': mode}
     # If we run into problems with the datebase changes
@@ -265,13 +265,13 @@ def setup_database():
             #  Recreate everything
             db.metadata.create_all(db.engine)
             db.create_all()
-            db.session.commit()
+            dbutil.commit()
             #  push the database version arm is looking for
             user = AlembicVersion('c54d68996895')
             ui_config = UISettings(1, 1, "spacelab", "en", 10, 200)
             db.session.add(ui_config)
             db.session.add(user)
-            db.session.commit()
+            dbutil.commit()
             return True
         except Exception:
             app.logger.debug("couldn't create all")

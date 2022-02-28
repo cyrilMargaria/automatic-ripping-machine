@@ -10,7 +10,7 @@ from arm.db import db
 from arm.config.config import cfg
 from flask_login import LoginManager, current_user, login_user, UserMixin  # noqa: F401
 from prettytable import PrettyTable
-
+import platform
 hidden_attribs = ("OMDB_API_KEY", "EMBY_USERID", "EMBY_PASSWORD", "EMBY_API_KEY", "PB_KEY", "IFTTT_KEY", "PO_KEY",
                   "PO_USER_KEY", "PO_APP_KEY", "ARM_API_KEY", "TMDB_API_KEY")
 HIDDEN_VALUE = "<hidden>"
@@ -57,6 +57,7 @@ class Job(db.Model):
     pid_hash = db.Column(db.Integer)
     tracks = db.relationship('Track', backref='job', lazy='dynamic')
     config = db.relationship('Config', uselist=False, backref="job")
+    host = db.Column(db.String(256))
 
     def __init__(self, devpath):
         """Return a disc object"""
@@ -67,9 +68,12 @@ class Job(db.Model):
         self.ejected = False
         self.updated = False
         self.logger = None
+        self.host = platform.node()
         if cfg['VIDEOTYPE'] != "auto":
             self.video_type = cfg['VIDEOTYPE']
         self.mountpoint, self.label, self.disctype = fs_utils.get_device_info(self.devpath)
+        if not self.mountpoint:
+            raise ValueError("No mount point")
         self.get_pid()        
         if self.disctype == "dvd" and not self.label:
             logging.info("No disk label Available. Trying lsdvd")
@@ -80,9 +84,10 @@ class Job(db.Model):
     def get_pid(self):
         """ return current pid """
         pid = os.getpid()
-        proc = psutil.Process(pid)
+        #proc = psutil.Process(pid)
         self.pid = pid
-        self.pid_hash = hash(proc)
+        # why do we care? 
+        self.pid_hash = 0
 
     def get_disc_type(self, found_hvdvd_ts):
         if self.disctype == "music":

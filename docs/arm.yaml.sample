@@ -79,6 +79,15 @@ MAX_CONCURRENT_TRANSCODES: 0
 # Additional parameters for dd. e.g. "conv=noerror,sync" for ignoring read errors
 DATA_RIP_PARAMETERS: ""
 
+# rsync or dd. if not set: dd
+# with rsync, if the disk can't be mounted, then dd is used
+DATA_RIP_TYPE: ""
+# By default data back with rsync are backed up locally, its also possible to set a specific rsync destination
+# Rsync will be towards DATA_RIP_RSYNC_DEST . The job label is not appended, rsync rules for the trailing / will be applied
+DATA_RIP_RSYNC_DEST: ""
+# extra option for rsync
+DATA_RIP_RSYNC_OPTS: ""
+
 # This selects the metadata provider, Each provider has their own ups and downs
 # But a general rule would be
 #    OMDB for movies and shows
@@ -104,9 +113,12 @@ RIP_POSTER: false
 # This over-rides any other abcde.conf files
 ABCDE_CONFIG_FILE: "/etc/abcde.conf"
 
-# Path to raw MakeMKV directory
+# Path to raw MakeMKV directory and data disk dump
 # Destination for MakeMKV and source for HandBrake
 RAW_PATH: "/home/arm/media/raw/"
+
+# destination for  data cd copy (see DATA_RIP_TYPE), if not set RAW_PATH is used
+#DATA_PATH: "/home/arm/files"
 
 # Intermediary directory for transcoding files
 # Destination for HandBrake
@@ -134,12 +146,21 @@ LOGPATH: "/home/arm/logs/"
 # If you are experiencing difficulties set this to DEBUG
 LOGLEVEL: "DEBUG"
 
+# Optional: logging destination: comma separated list of log destination
+#  stdout, stderr, syslog: self-explaining
+#  file (default): per ripping job log file, required for seeing the logs in the webui
+#  udp://  syslog udp destination
+#  if LOGDEST is set and file is *NOT* set, the webui will not (yet) be able to display the log
+# LOGDEST: stdout,stderr,syslog,file,udp://
+
 # How long to let log files live before deleting (in days)
 # Set to 0 to disable
 LOGLIFE: 1
 
 # Path to ARM database file
 DBFILE: "/home/arm/db/arm.db"
+# Optional:  
+# DB_URL: "postgresql://user:password@host:port/db"
 
 
 ##################
@@ -147,11 +168,16 @@ DBFILE: "/home/arm/db/arm.db"
 ##################
 
 # IP address of web server (this machine)
-# Use x.x.x.x to autodetect the IP address to use
+# Use x.x.x.x to autodetect the IP address to use (first non localhost ip address)
+# use 0.0.0.0 to bind to all interface (beware of the the security risk)
+# using WEBSERVER_NAME is then recommended 
 WEBSERVER_IP: x.x.x.x
 
 # Port for web server
 WEBSERVER_PORT: 8080
+
+# name to be advertized in notifications
+WEBSERVER_NAME: localhost
 
 
 ########################

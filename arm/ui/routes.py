@@ -133,7 +133,7 @@ def setup_stage2():
         db.session.add(user)
         # app.logger.debug("user: " + username + " Pass:" + pass1.decode('utf-8'))
         try:
-            db.session.commit()
+            arm.db.commit()
         except Exception as e:
             flash(str(e), "danger")
             return redirect('/setup-stage2')
@@ -163,7 +163,7 @@ def update_password():
             user.password = hashed_password
             user.hash = hashed
             try:
-                db.session.commit()
+                arm.db.commit()
                 flash("Password successfully updated", "success")
                 return redirect("logout")
             except Exception as e:
@@ -557,7 +557,7 @@ def changeparams():
         job.disctype = format(form.DISCTYPE.data)
         for key, value in cfg.items():
             setattr(config, key, value)
-        db.session.commit()
+        arm.db.commit()
         db.session.refresh(job)
         db.session.refresh(config)
         flash(f'Parameters changed. Rip Method={config.RIPMETHOD}, Main Feature={config.MAINFEATURE},'
@@ -580,7 +580,7 @@ def customtitle():
         form.populate_obj(job)
         job.title = format(form.title.data)
         job.year = format(form.year.data)
-        db.session.commit()
+        arm.db.commit()
         flash(f'custom title changed. Title={form.title.data}, Year={form.year.data}.', "success")
         return redirect(url_for('home'))
     return render_template('customTitle.html', title='Change Title', form=form, job=job)
@@ -665,7 +665,7 @@ def updatetitle():
     job.poster_url_manual = poster_url
     job.poster_url = poster_url
     job.hasnicetitle = True
-    db.session.commit()
+    arm.db.commit()
     # TODO: show the previous values that were set, not just assume it was _auto
     flash(f'Title: {job.title_auto} ({job.year_auto}) was updated to {new_title} ({new_year})', "success")
     return redirect("/")
@@ -690,12 +690,12 @@ def home():
         mfreegb = psutil.disk_usage(cfg['COMPLETED_PATH']).free
         mfreegb = round(mfreegb / 1073741824, 1)
         media_percent = psutil.disk_usage(cfg['COMPLETED_PATH']).percent
-    except FileNotFoundError:
+    except FileNotFoundError as e :
         freegb = 0
         arm_percent = 0
         mfreegb = 0
         media_percent = 0
-        app.logger.debug("ARM folders not found")
+        app.logger.debug("ARM folders not found: %s", e)
         flash("There was a problem accessing the ARM folders. Please make sure you have setup ARM<br/>"
               "Setup can be started by visiting <a href=\"/setup\">setup page</a> ARM will not work correctly until"
               "until you have added an admin account", "danger")
@@ -874,7 +874,7 @@ def import_movies():
     t1 = time.time()
     total = round(t1 - t0, 3)
     app.logger.debug(str(total) + " sec")
-    db.session.commit()
+    arm.db.commit()
     return app.response_class(response=json.dumps(movies, indent=4, sort_keys=True),
                               status=200,
                               mimetype='application/json')

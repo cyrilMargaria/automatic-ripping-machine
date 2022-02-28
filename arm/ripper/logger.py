@@ -8,8 +8,65 @@ import logging
 import logging.handlers
 import sys
 import time
-
+import threading
+import atexit
+import time
+import random
+import string
 from arm.config.config import cfg
+
+def random_pipe(directory, idlen=8):
+    """ Create a randomly named pipe """
+    retries = 20
+    while retries > 0:
+        retries -= 1
+        random_name = os.path.join(directory, "".join([random.choice(string.ascii_letters+string.digits) for x in range(0, idlen)]))
+        if not os.path.exists(random_name):
+            os.mkfifo(random_name)
+            return random_name
+    raise ValueError("could not create randome FIFO")
+
+
+class redirectFile(threading.Thread):
+    """ read a pipe and log it to a logger (function) """
+    def __init__(self, logf, pipe):
+        super().__init__()
+        self._logger = logf
+        self._pipename = pipe
+        self._pipe = None
+        self._stop = threading.Event()
+        self._running = False
+        self.setDaemon(True)
+        self.setName(f"Log piper for {pipe}")
+        atexit.register(self._finish)
+        
+    def _finish(self):
+        if self._pipe:
+            self._pipe.close()
+        if self._running:
+            self._stop.set()
+        try:
+            if self._pipename:
+                os.remove(self._pipename)
+        except:
+            pass
+
+        
+    def run(self):
+        try:
+            self._stop.clear()
+            self._running = True
+            self._pipe = open(self._pipename, "r")
+            while not self._stop.is_set():
+                line = self._pipe.readline()
+                if line:
+                    self._logger(line.strip())
+                else:
+                    self._stop.wait(1)
+        except Exception as e:
+            self._running = False
+            self._logger("Exception in redirectFile thread: %s",e)
+            
 
 
 def setuplogging(job, level=None):
@@ -18,13 +75,13 @@ def setuplogging(job, level=None):
 
     # Support different destination
     destination = cfg.get("LOGDEST", "FILE")
-    log_level = cfg['LOGLEVEL']
+    log_level = cfg.get('LOGLEVEL', 'INFO')
     if level:
         log_level = level
     # normalize  cfg['LOGPATH'] (will be used only if destination is FILE
-    logPath = cfg['LOGPATH']
-    while logPath and logPath[-1] == "/":
-        logPath = logPath[:-1]
+    log_path = cfg['LOGPATH']
+    while log_path and log_path[-1] == "/":
+        log_path = log_path[:-1]
 
     # setup helpful information for the log,
     # This isnt catching all of them
@@ -32,56 +89,81 @@ def setuplogging(job, level=None):
     logbase = "empty"
     if job.label == "" or job.label is None:
         if job.disctype == "music":
-            logbase =  job.identify_audio_cd()
+            logbase = job.identify_audio_cd()
     else:
         logbase = job.label
         # We need to give the logfile only to database
     # default to stdout
-    log_handler = logging.StreamHandler(stream=sys.stdout)
-    if destination == "FILE":        
-        # Make the log dir if it doesnt exist
-        if not os.path.exists(logPath):
-            os.makedirs(logPath)
-        # unique filename 
-        if os.path.isfile(os.path.join(logPath, "{}.log".format(logbase))):
-            # log already exist, generate an unique one
-            logbase = str(job.label) + "_" + str(round(time.time() * 100))
-        logfile = "{}.log".format(logbase)
-        logfull = os.path.join(logPath, logfile)
-        log_handler = logging.FileHandler(logfull)
-    elif destination == "SYSLOG":
-        log_handler = logging.handlers.SysLogHandler(address='/dev/log')
-        # TODO: named pipe
-        logfile = "/dev/null"
-    elif destination.startswith("udp://"):
-        destination = destination[len("udp://"):]
-        tupl = destination.split(":")
-        if len(tupl) > 1:
-            tupl = (tupl[0], int(tupl[1]))
+    #
+    log_handlers = []
+    #  if pipe is set to True, a named pipe will be created
+    # and used for the other programs to redirect their log to
+    pipe = False
+    # if a real file is provided, use it
+    has_file = False
+    for dst in destination.split(","):
+        dst = dst.strip()
+        log_handler = None
+        if dst.upper() == "FILE":
+            print("Use file")
+            # Make the log dir if it doesnt exist
+            if not os.path.exists(log_path):
+                os.makedirs(log_path)
+            # unique filename
+            if os.path.isfile(os.path.join(log_path, "{}.log".format(logbase))):
+                # log already exist, generate an unique one
+                logbase = str(job.label) + "_" + str(round(time.time() * 100))
+            logfile = "{}.log".format(logbase)
+            logfull = os.path.join(log_path, logfile)
+            logfile = logfull
+            log_handler = logging.FileHandler(logfull)
+            has_file = True
+        elif dst.upper() == "SYSLOG":
+            log_handler = logging.handlers.SysLogHandler(address='/dev/log')
+            pipe = True
+        elif dst.startswith("udp://"):
+            dst = dst[len("udp://"):]
+            tupl = dst.split(":")
+            if len(tupl) > 1:
+                tupl = (tupl[0], int(tupl[1]))
+            else:
+                tupl = (dst, 514)
+            log_handler = logging.handlers.SysLogHandler(address=tupl)
+            pipe = True
+        elif dst.startswith("stdout"):
+            print("Use Stdout")
+            log_handler = logging.StreamHandler(stream=sys.stdout)
+            pipe = True
+        elif dst.startswith("stderr"):
+            log_handler = logging.StreamHandler(stream=sys.stderr)
+            pipe = True
         else:
-            tupl = (destination, 514)
-        log_handler = logging.handlers.SysLogHandler(address=tupl)
-        logfile = "/dev/null"
-    elif destination.startswith("stdout"):
-        # its already the case
-        logfile = "1"        
-        pass
-    elif destination.startswith("stderr"):
-        log_handler = logging.StreamHandler(stream=sys.stderr)
-        logfile = "2"        
-    else:
-        # suppose a file
-        log_handler = logging.FileHandler(destination)
-        logfile = "destination"
-
+            # suppose a file
+            log_handler = logging.FileHandler(dst)
+            logfile = dst
+            has_file = True
+        if log_handler:
+            log_handlers.append(log_handler)
+    
+            
+    if not log_handlers:
+        log_handlers = [logging.StreamHandler(stream=sys.stdout)]
+    level = getattr(logging, log_level.upper())
     fmt = '[%(asctime)s] %(levelname)s ARM[{}]: %(message)s'.format(logbase)
     if log_level == "DEBUG":
         fmt = '[%(asctime)s] %(levelname)s ARM[{}]: %(module)s.%(funcName)s %(message)s'.format(logbase)
-
-    
-    job.logfile = logfile
-    logging.basicConfig(format=fmt, handlers=[log_handler], datefmt='%Y-%m-%d %H:%M:%S', level=log_level)
-    result = logging.getLogger("arm")
+    # force existing logger to be removed, otherwise we do not log
+    logging.basicConfig(format=fmt, handlers=log_handlers, force=True, datefmt='%Y-%m-%d %H:%M:%S', level=level)
+    if pipe and not has_file:
+        logger = logging.getLogger("arm")
+        # Make it configurable if needed
+        localpipe = random_pipe("/tmp")
+        logfile = localpipe
+        logger.info("Local pipe %s will be used for log redirection", localpipe)
+        # 
+        r = redirectFile(logger.debug, localpipe)
+        r.start()
+    job.logfile = logfile        
     # This stops apprise spitting our secret keys when users posts online
     logging.getLogger("apprise").setLevel(logging.WARN)
     logging.getLogger("requests").setLevel(logging.WARN)

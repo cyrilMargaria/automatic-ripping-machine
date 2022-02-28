@@ -5,9 +5,8 @@ import sys
 import argparse
 
 from arm.ui import app, configure_app  # noqa E402
-from arm.config.config import cfg  # noqa E402
+from arm.config.config import cfg, webserver_ip_hostname  # noqa E402
 import arm.ui.routes  # noqa E402
-
 
 def main():
     parser = argparse.ArgumentParser(description='Process disc using ARM')
@@ -18,24 +17,9 @@ def main():
     args = parser.parse_args()
     if args.config_file:
         cfg.path = args.config_file
-
-    host = args.ip
+    host = args.ip    
     if not host:
-        host = cfg['WEBSERVER_IP']
-        if host == 'x.x.x.x':
-            # autodetect host IP address
-            from netifaces import interfaces, ifaddresses, AF_INET
-            ip_list = []
-            for interface in interfaces():
-                inet_links = ifaddresses(interface).get(AF_INET, [])
-                for link in inet_links:
-                    ip = link['addr']
-                    if ip != '127.0.0.1':
-                        ip_list.append(ip)
-            if len(ip_list) > 0:
-                host = ip_list[0]
-            else:
-                host = '127.0.0.1'
+        host, _ = webserver_ip_hostname()       
     port = args.port
     if not port:
         port = cfg['WEBSERVER_PORT']

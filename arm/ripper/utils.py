@@ -14,10 +14,11 @@ import re
 import platform
 import psutil
 import apprise
-from arm.config.config import cfg
+from arm.config.config import cfg, cfgWrapper, webserver_ip_hostname
 from arm.ui import app, db
 import arm.models.models as m
-from arm.ripper.fs_utils import make_dir
+import arm.ripper.fs_utils  as fs_utils
+import arm.db as dbutil
 
 NOTIFY_TITLE = "ARM notification"
 
@@ -167,9 +168,10 @@ def notify_entry(job):
     # Notify On Entry
     if job.disctype in ["dvd", "bluray"]:
         # Send the notifications
+        _, hostname = webserver_ip_hostname()
         notify(job, NOTIFY_TITLE,
                f"Found disc: {job.title}. Disc type is {job.disctype}. Main Feature is {cfg['MAINFEATURE']}"
-               f".  Edit entry here: http://{check_ip()}:"
+               f".  Edit entry here: http://{hostname}:"
                f"{cfg['WEBSERVER_PORT']}/jobdetail?job_id={job.job_id}")
     elif job.disctype == "music":
         notify(job, NOTIFY_TITLE, f"Found music CD: {job.label}. Ripping all tracks")
@@ -254,7 +256,7 @@ def move_files(basepath, filename, job, ismainfeature=False):
     m_path = os.path.join(cfg["COMPLETED_PATH"], str(type_sub_folder), videotitle)
     # For series there are no extras as we never get a main feature
     e_path = os.path.join(m_path, cfg["EXTRAS_SUB"]) if job.video_type != "series" else m_path
-    make_dir(m_path)
+    fs_utils.make_dir(m_path)
 
     if ismainfeature is True:
         logging.info(f"Track is the Main Title.  Moving '{filename}' to {m_path}")
@@ -267,7 +269,7 @@ def move_files(basepath, filename, job, ismainfeature=False):
         else:
             logging.info(f"File: {m_file} already exists.  Not moving.")
     else:
-        make_dir(e_path)
+        fs_utils.make_dir(e_path)
         logging.info(f"Moving '{filename}' to {e_path}")
         e_file = os.path.join(e_path, videotitle + "." + cfg["DEST_EXT"])
         if not os.path.isfile(e_file):
@@ -353,6 +355,7 @@ def rip_music(job, logfile):
     return False
 
 
+
 def rip_data(job, datapath, logfile):
     """
     Rip data disc using dd on the command line\n
@@ -363,44 +366,87 @@ def rip_data(job, datapath, logfile):
     returns True/False for success/fail
     """
 
-    if job.disctype == "data":
-        logging.info("Disc identified as data")
+    if job.disctype != "data":
+        return False
+    
+    logging.info("Disc identified as data")
 
-        if job.label == "" or job.label is None:
-            job.label = "datadisc"
+    if job.label == "" or job.label is None:
+        job.label = "datadisc"
 
-        incomplete_filename = os.path.join(datapath, job.label + ".part")
-        final_filename = os.path.join(datapath, job.label + ".iso")
+    rip_method = cfg.get("DATA_RIP_TYPE", "dd")
+    if rip_method == "rsync":
+        # need mount point
+        fs_utils.mount_device(job.devpath)
+        mountpoint, fs_type, mounted, _ = fs_utils.get_device_mount_point(job.devpath)
+        if  mounted:
+            return rip_data_rsync(job, datapath, mountpoint, logfile)
+            
+        rip_method = "dd"
+        
+    if rip_method != "dd":
+        logging.warning("Unknown data ripping method %s, reverting to dd", rip_method)                            
+    return rip_data_dd(job, datapath, logfile)
 
-        logging.info("Ripping data disc to: " + incomplete_filename)
-
-        # Added from pull 366
-        cmd = 'dd if="{0}" of="{1}" {2} 2>> {3}'.format(
-            job.devpath,
-            incomplete_filename,
-            cfg["DATA_RIP_PARAMETERS"],
-            logfile
-        )
-
-        logging.debug("Sending command: " + cmd)
-
-        try:
-            subprocess.check_output(
-                cmd,
-                shell=True
-            ).decode("utf-8")
-            logging.info("Data rip call successful")
-            os.rename(incomplete_filename, final_filename)
-            return True
-        except subprocess.CalledProcessError as dd_error:
-            err = "Data rip failed with code: " + str(dd_error.returncode) + "(" + str(dd_error.output) + ")"
-            logging.error(err)
-            os.unlink(incomplete_filename)
-            # sys.exit(err)
+def rip_data_rsync(job, datapath, mount, logfile):
+    rsync_dest = cfg.get("DATA_RIP_RSYNC_DEST")
+    if not rsync_dest:
+        rsync_dest =   os.path.join(datapath, job.label)
+    cmd = 'rsync -avz {0} {1}/ {2} 2>> {3}'.format(
+         cfg.get("DATA_RIP_RSYNC_OPTS", ""),
+         mount,
+         rsync_dest,
+         logfile
+    )
+    
+    logging.debug("Data backup using rsync:",  cmd)
+    
+    try:
+        subprocess.check_output(
+            cmd,
+            shell=True
+        ).decode("utf-8")
+        logging.info("Data rip call successful")
+        return True
+    except subprocess.CalledProcessError as dd_error:
+        err = "Data rip failed with code: " + str(dd_error.returncode) + "(" + str(dd_error.output) + ")"
+        logging.error(err)
+        # sys.exit(err)
 
     return False
 
+def rip_data_dd(job, datapath, logfile):
+    incomplete_filename = os.path.join(datapath, job.label + ".part")
+    final_filename = os.path.join(datapath, job.label + ".iso")
+        
+    logging.info("Ripping data disc to: " + incomplete_filename)
 
+    # Added from pull 366
+    cmd = 'dd if="{0}" of="{1}" {2} 2>> {3}'.format(
+        job.devpath,
+        incomplete_filename,
+        cfg["DATA_RIP_PARAMETERS"],
+        logfile
+    )
+        
+    logging.debug("Sending command: " + cmd)
+    
+    try:
+        subprocess.check_output(
+            cmd,
+            shell=True
+        ).decode("utf-8")
+        logging.info("Data rip call successful")
+        os.rename(incomplete_filename, final_filename)
+        return True
+    except subprocess.CalledProcessError as dd_error:
+        err = "Data rip failed with code: " + str(dd_error.returncode) + "(" + str(dd_error.output) + ")"
+        logging.error(err)
+        os.unlink(incomplete_filename)
+        # sys.exit(err)
+
+    return False
+        
 def set_permissions(job, directory_to_traverse):
     if not cfg['SET_MEDIA_PERMISSIONS']:
         return False
@@ -464,7 +510,7 @@ def put_track(job, t_no, seconds, aspect, fps, mainfeature, source, filename="")
     )
     t.ripped = True if seconds > int(cfg['MINLENGTH']) else False
     db.session.add(t)
-    db.session.commit()
+    dbutil.commit()
 
 
 def arm_setup():
@@ -478,18 +524,9 @@ def arm_setup():
     None
     """
     try:
-        # Make the Raw dir if it doesnt exist
-        if not os.path.exists(cfg['RAW_PATH']):
-            os.makedirs(cfg['RAW_PATH'])
-        # Make the Transcode dir if it doesnt exist
-        if not os.path.exists(cfg['TRANSCODE_PATH']):
-            os.makedirs(cfg['TRANSCODE_PATH'])
-        # Make the Complete dir if it doesnt exist
-        if not os.path.exists(cfg['COMPLETED_PATH']):
-            os.makedirs(cfg['COMPLETED_PATH'])
-        # Make the log dir if it doesnt exist
-        if not os.path.exists(cfg['LOGPATH']):
-            os.makedirs(cfg['LOGPATH'])
+        for cfgPath in ['RAW_PATH', 'TRANSCODE_PATH', 'COMPLETED_PATH', 'LOGPATH', 'DATA_PATH']:
+            if cfg.get(cfgPath)  and not os.path.exists(cfg.get(cfgPath)):
+                os.makedirs(cfg.get(cfgPath))
     except IOError as e:  # noqa: F841
         logging.error(f"A fatal error has occurred.  Cant find/create the folders from arm.yaml - Error:{e}")
 
@@ -515,7 +552,7 @@ def database_updater(args, job, wait_time=90):
             logging.debug(f"{key}={value}")
     for i in range(wait_time):  # give up after the users wait period in seconds
         try:
-            db.session.commit()
+            dbutil.commit()
         except Exception as e:
             if "locked" in str(e):
                 time.sleep(1)
@@ -533,7 +570,7 @@ def database_adder(obj_class):
         try:
             logging.debug(f"Trying to add {type(obj_class).__name__}")
             db.session.add(obj_class)
-            db.session.commit()
+            dbutil.commit()
         except Exception as e:
             if "locked" in str(e):
                 time.sleep(1)
@@ -558,7 +595,7 @@ def clean_old_jobs():
             logging.info(f"Job #{j.job_id} with PID {j.pid} has been abandoned."
                          f"Updating job status to fail.")
             j.status = "fail"
-            db.session.commit()
+            dbutil.commit()
 
 
 def job_dupe_check(job):
@@ -605,33 +642,6 @@ def job_dupe_check(job):
     return False, None
 
 
-def check_ip():
-    """
-        Check if user has set an ip in the config file
-        if not gets the most likely ip
-        arguments:
-        none
-        return: the ip of the host or 127.0.0.1
-    """
-    host = cfg['WEBSERVER_IP']
-    if host == 'x.x.x.x':
-        # autodetect host IP address
-        from netifaces import interfaces, ifaddresses, AF_INET
-        ip_list = []
-        for interface in interfaces():
-            inet_links = ifaddresses(interface).get(AF_INET, [])
-            for link in inet_links:
-                ip = link['addr']
-                # print(str(ip))
-                if ip != '127.0.0.1' and not (ip.startswith('172')):
-                    ip_list.append(ip)
-                    # print(str(ip))
-        if len(ip_list) > 0:
-            return ip_list[0]
-        else:
-            return '127.0.0.1'
-    else:
-        return host
 
 
 def apprise_notify(apprise_cfg, title, body):
@@ -645,12 +655,8 @@ def apprise_notify(apprise_cfg, title, body):
     :returns
     nothing
     """
-
-    cfg = {}
-    yamlfile = apprise_cfg
-    with open(yamlfile, "r") as f:
-        cfg = yaml.safe_load(f)
-    cfg = dictProxy(cfg)
+    # cfgWrapper allows to load remote files and env overrides
+    cfg = cfgWrapper(path=apprise_cfg)
     
     urls = ["dbus://", "kde://", "gnome://", "windows://"]
     if platform.system() == 'Linux':

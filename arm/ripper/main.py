@@ -10,7 +10,7 @@ import re  # noqa: E402
 import shutil  # noqa: E402
 import getpass  # noqa E402
 import psutil  # noqa E402
-
+import platform
 import arm
 import logger, utils, makemkv, handbrake, identify  # noqa: E402
 import  fs_utils
@@ -150,7 +150,7 @@ def skip_transcode(job, hb_out_path, hb_in_path, mkv_out_path, type_sub_folder):
     # It should be safe to do this as we aren't waiting for transcode
     job.status = "success"
     job.path = hb_out_path
-    db.session.commit()
+    dbutil.commit()
     job.eject()
     sys.exit()
 
@@ -170,7 +170,7 @@ def main(logfile, job):
     if cfg["MANUAL_WAIT"]:
         logging.info(f"Waiting {cfg['MANUAL_WAIT_TIME']} seconds for manual override.")
         job.status = "waiting"
-        db.session.commit()
+        dbutil.commit()
         sleep_time = 0
         while sleep_time < cfg["MANUAL_WAIT_TIME"]:
             time.sleep(5)
@@ -180,7 +180,7 @@ def main(logfile, job):
             if job.title_manual:
                 break
         job.status = "active"
-        db.session.commit()
+        dbutil.commit()
 
     # If the user has set info manually update database and hasnicetitle
     if job.title_manual:
@@ -227,7 +227,7 @@ def main(logfile, job):
                     utils.notify(job, NOTIFY_TITLE, "ARM encountered a fatal error processing " + str(
                         job.title) + ".  Couldn't create filesystem. Possible permission error. ")
                     job.status = "fail"
-                    db.session.commit()
+                    dbutil.commit()
                     sys.exit()
             else:
                 # We arent allowed to rip dupes, notify and exit
@@ -236,19 +236,19 @@ def main(logfile, job):
                     job.title) + ".  Duplicate rips are disabled. You can re-enable them from your config file. ")
                 job.eject()
                 job.status = "fail"
-                db.session.commit()
+                dbutil.commit()
                 sys.exit()
 
         # Use FFMPeg to convert Large Poster if enabled in config
         if job.disctype == "dvd" and cfg["RIP_POSTER"]:
-            os.system("mount " + job.devpath)
+            fs_utils.mount_device(job.devpath)
             if os.path.isfile(job.mountpoint+"/JACKET_P/J00___5L.MP2"):
                 logging.info("Converting NTSC Poster Image")
                 os.system('ffmpeg -i "'+job.mountpoint+'/JACKET_P/J00___5L.MP2" "'+hb_out_path+'/poster.png"')
             elif os.path.isfile(job.mountpoint+"/JACKET_P/J00___6L.MP2"):
                 logging.info("Converting PAL Poster Image")
                 os.system('ffmpeg -i "'+job.mountpoint+'/JACKET_P/J00___6L.MP2" "'+hb_out_path+'/poster.png"')
-            os.system("umount " + job.devpath)
+            fs_utils.unmount_device(job.devpath)
 
         logging.info(f"Processing files to: {hb_out_path}")
         mkvoutpath = None
@@ -260,7 +260,7 @@ def main(logfile, job):
             # send to makemkv for ripping
             # run MakeMKV and get path to output
             job.status = "ripping"
-            db.session.commit()
+            dbutil.commit()
             try:
                 mkvoutpath = makemkv.makemkv(logfile, job)
             except:  # noqa: E722
@@ -269,7 +269,7 @@ def main(logfile, job):
             if mkvoutpath is None:
                 logging.error("MakeMKV did not complete successfully.  Exiting ARM!")
                 job.status = "fail"
-                db.session.commit()
+                dbutil.commit()
                 sys.exit()
             if cfg["NOTIFY_RIP"]:
                 utils.notify(job, NOTIFY_TITLE, f"{job.title} rip complete. Starting transcode. ")
@@ -281,11 +281,13 @@ def main(logfile, job):
                 skip_transcode(job, hb_out_path, hb_in_path, mkvoutpath, type_sub_folder)
         job.path = hb_out_path
         job.status = "transcoding"
-        db.session.commit()
+        dbutil.commit()
         if job.disctype == "bluray" and cfg["RIPMETHOD"] == "mkv":
             handbrake.handbrake_mkv(hb_in_path, hb_out_path, logfile, job)
+            job.eject()
         elif job.disctype == "dvd" and (not cfg["MAINFEATURE"] and cfg["RIPMETHOD"] == "mkv"):
             handbrake.handbrake_mkv(hb_in_path, hb_out_path, logfile, job)
+            job.eject()
         elif job.video_type == "movie" and cfg["MAINFEATURE"] and job.hasnicetitle:
             handbrake.handbrake_mainfeature(hb_in_path, hb_out_path, logfile, job)
             job.eject()
@@ -375,19 +377,19 @@ def main(logfile, job):
             utils.scan_emby(job)
             # This shouldnt be needed. but to be safe
             job.status = "success"
-            db.session.commit()
+            dbutil.commit()
         else:
             logging.info("Music rip failed.  See previous errors.  Exiting. ")
             job.eject()
             job.status = "fail"
-            db.session.commit()
+            dbutil.commit()
 
     elif job.disctype == "data":
         # get filesystem in order
-        datapath = os.path.join(cfg["RAW_PATH"], str(job.label))
+        datapath = os.path.join(cfg.get("DATA_PATH", cfg["RAW_PATH"]), str(job.label))
         if (fs_utils.make_dir(datapath)) is False:
             ts = str(round(time.time() * 100))
-            datapath = os.path.join(cfg["RAW_PATH"], str(job.label) + "_" + ts)
+            datapath = os.path.join(cfg.get("DATA_PATH", cfg["RAW_PATH"]), str(job.label) + "_" + ts)
 
             if (fs_utils.make_dir(datapath)) is False:
                 logging.info(f"Could not create data directory: {datapath}  Exiting ARM. ")
@@ -410,7 +412,7 @@ def main(logfile, job):
     # hours, minutes = divmod(minutes, 60)
     # len = '{:d}:{:02d}:{:02d}'.format(hours, minutes, seconds)
     # job.job_length = len
-    # db.session.commit()
+    # dbutil.commit()
 
 def cli():
     """ cli entry point """
@@ -421,7 +423,7 @@ def cli():
     devpath = "/dev/" + args.devpath
     job = Job(devpath)
     logfile = logger.setuplogging(job, level=args.log_level)
-
+    log = logging.getLogger("arm")
     if utils.get_cdrom_status(devpath) != 4:
         logging.info("Drive appears to be empty or is not ready.  Exiting ARM.")
         sys.exit()
@@ -429,7 +431,7 @@ def cli():
     if logfile.find("empty.log") != -1 or re.search("NAS_[0-9].?log", logfile) is not None:
         sys.exit()
     # This will kill any runs that have been triggered twice on the same device
-    running_jobs = db.session.query(Job).filter(Job.status.notin_(['fail', 'success']), Job.devpath == devpath).all()
+    running_jobs = db.session.query(Job).filter(Job.status.notin_(['fail', 'success']), Job.devpath == devpath, Job.host == platform.node()).all()
     if len(running_jobs) >= 1:
         for j in running_jobs:
             print(j.start_time - datetime.datetime.now())
@@ -479,7 +481,7 @@ def cli():
         hours, minutes = divmod(minutes, 60)
         total_len = '{:d}:{:02d}:{:02d}'.format(hours, minutes, seconds)
         job.job_length = total_len
-        db.session.commit()
+        dbutil.commit()
 
 if __name__ == "__main__":
     cli()

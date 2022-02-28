@@ -55,7 +55,10 @@ setup(
         ('share/doc/arm', globm('docs/*', 'setup/*')),
         ('share/doc/arm-scripts', globm('scripts/*')),
     ],  # Optional
-    entry_points={'console_scripts': ['arm = arm.ripper.main:cli']},
+    entry_points={'console_scripts': [
+        'arm = arm.ripper.main:cli',
+        'arm-ui = arm.runui:main'
+    ]},
 
     # Files that can be tinkered by the user
     classifiers=[

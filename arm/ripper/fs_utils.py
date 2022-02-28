@@ -28,10 +28,15 @@ def get_device_mount_point(device):
     # TODO: linux
     if platform.system() == 'Darwin':
         mounts = list_mounts_darwin()
+        logging.debug("Mounts: %r", mounts)
         for mnt in mounts:
             if mnt.src == device:
-                return mnt.dst, mnt.fs_type, True
-        return None, None, False
+                return mnt.dst, mnt.fs_type, mnt.fs_uuid, True
+        return None, None, None, False
+    # TODO: linux
+    if platform.system() == 'Linux':
+        mount = os.path.join(cfg.get("MOUNTPATH", "/mnt"), os.path.basename(device))
+        # TODOq
     raise ValueError("Not implemented")
 
 
@@ -45,11 +50,11 @@ def get_device_info(devpath):
     disctype = "unknown"
     label = ""
     if platform.system() == 'Darwin':
-        mount, fs_type, _ = get_device_mount_point(devpath)
+        mount, fs_type, uuid, _ = get_device_mount_point(devpath)
         if not mount:
             return mount, label, disctype
         disctype = OSX_MOUNT_TO_TYPE.get(fs_type, "unknown")
-        label = os.path.basename(mount)
+        label = "{}-{}".format(os.path.basename(mount), uuid)
         return mount, label, disctype
     # linux/default
     mount = os.path.join(cfg.get("MOUNTPATH", "/mnt"), devpath)
@@ -96,13 +101,13 @@ def mount_device(devpath):
     """ Mount a device """
     devpath = check_device_path(devpath)
     if platform.system() == 'Darwin':
-        mount, fs_type, mounted = get_device_mount_point(devpath)
+        mount, fs_type, uuid, mounted = get_device_mount_point(devpath)
         # we do not check?
     else:
         os.system("mount " + devpath)
 
 def unmount_device(devpath):
-    """ Mount a device """
+    """ unmount a device """
     devpath = check_device_path(devpath)
     if platform.system() == 'Darwin':
         # mount, fs_type, mounted = get_device_mount_point(devpath)
@@ -190,7 +195,7 @@ class StatFS(ctypes.Structure):
     ]
 
 
-Mount = collections.namedtuple("Mount", "src dst fs_type")
+Mount = collections.namedtuple("Mount", "src dst fs_type fs_uuid")
 
 if platform.system() == 'Darwin':
     try:
@@ -208,7 +213,9 @@ if platform.system() == 'Darwin':
         return [Mount(
             array[x].f_mntfromname.decode('utf8'),
             array[x].f_mntonname.decode('utf8'),
-            array[x].f_fstypename.decode('utf8')) for x in range(0, entries)]
+            array[x].f_fstypename.decode('utf8'),
+            "{:x}".format((array[x].f_fsid.val[0]<<32)|array[x].f_fsid.val[1])
+        ) for x in range(0, entries)]
 
 
 def make_dir(path):
