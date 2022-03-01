@@ -11,7 +11,7 @@ def globm(*args):
                  
 setup(
     name='arm',
-    version='2.0.1',
+    version='2.5.2',
     packages=find_packages(include=['arm', 'arm.*']),
     url='https://github.com/automatic-ripping-machine/automatic-ripping-machine',
     license='MIT',
@@ -35,6 +35,10 @@ setup(
         'musicbrainzngs>=0.7.1',
         'discid>=1.1.1',
         'psutil',
+        'flask_cors',
+        'bcrypt',
+        'prettytable',
+        'psycopg2',
     ],
     tests_require=(),
     options={},
@@ -50,6 +54,11 @@ setup(
         Data Disc -> Make an ISO backup
         """
     ),
+    package_data={
+        'arm.ui': ['templates/*', 'static/*/*', 'static/manifest.json', '*.json'],
+        'arm.migrations': ['alembic.ini', 'script.py.mako', 'versions/*'],
+    },
+
     # Package data: MANIFEST.in
     data_files=[
         ('share/doc/arm', globm('docs/*', 'setup/*')),

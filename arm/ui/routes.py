@@ -644,6 +644,10 @@ def updatetitle():
     """
     used to save the details from the search
     """
+    def trunc(d, l):
+        if not d:
+            return d
+        return d[:l]
     # updatetitle?title=Home&amp;year=2015&amp;imdbID=tt2224026&amp;type=movie&amp;
     #  poster=http://image.tmdb.org/t/p/original/usFenYnk6mr8C62dB1MoAfSWMGR.jpg&amp;job_id=109
     new_title = request.args.get('title')
@@ -656,8 +660,8 @@ def updatetitle():
     job = Job.query.get(job_id)
     job.title = utils.clean_for_filename(new_title)
     job.title_manual = utils.clean_for_filename(new_title)
-    job.year = new_year
-    job.year_manual = new_year
+    job.year = trunc(new_year, 4)
+    job.year_manual = trunc(new_year, 4)
     job.video_type_manual = video_type
     job.video_type = video_type
     job.imdb_id_manual = imdb_id

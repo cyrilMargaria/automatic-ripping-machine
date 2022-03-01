@@ -12,13 +12,12 @@ import getpass  # noqa E402
 import psutil  # noqa E402
 import platform
 import arm
-import logger, utils, makemkv, handbrake, identify  # noqa: E402
-import  fs_utils
+from  arm.ripper import logger, utils, makemkv, handbrake, identify, fs_utils  # noqa: E402
 import arm.db as dbutil
 from  arm.db import db
 from arm.config.config import cfg  # noqa: E402
 
-from getkeys import grabkeys  # noqa: E402
+from arm.ripper.getkeys import grabkeys  # noqa: E402
 from arm.models.models import Job, Config  # noqa: E402
 import arm.ui
 NOTIFY_TITLE = "ARM notification"
