@@ -99,18 +99,26 @@ def check_device_path(devpath):
 
 def mount_device(devpath):
     """ Mount a device """
+    logging.debug("mount %s", devpath)
     devpath = check_device_path(devpath)
     if platform.system() == 'Darwin':
         mount, fs_type, uuid, mounted = get_device_mount_point(devpath)
+        if not mounted:
+            logging.debug("not mounted, mount it %s", devpath)
+            
+            os.system(f"diskutil mount {devpath}")
         # we do not check?
     else:
         os.system("mount " + devpath)
 
 def unmount_device(devpath):
     """ unmount a device """
+    logging.debug("Unmount %s", devpath)
     devpath = check_device_path(devpath)
     if platform.system() == 'Darwin':
-        # mount, fs_type, mounted = get_device_mount_point(devpath)
+        mount, fs_type, uuid, mounted = get_device_mount_point(devpath)
+        if mounted:
+            os.system(f"diskutil unmountDisk {devpath}")
         # we do not check?
         pass
     else:

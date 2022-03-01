@@ -96,6 +96,8 @@ class Job(db.Model):
     def get_disc_type(self, found_hvdvd_ts):
         if self.disctype == "music":
             logging.debug("Disc is music.")
+            # need to unmount it
+            fs_utils.unmount_device(self.devpath)
             self.label = music_brainz.main(self)
         elif os.path.isdir(self.mountpoint + "/VIDEO_TS"):
             logging.debug(f"Found: {self.mountpoint}/VIDEO_TS")

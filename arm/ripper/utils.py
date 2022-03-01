@@ -368,7 +368,7 @@ def rip_data(job, datapath, logfile):
 
     if job.disctype != "data":
         return False
-    
+
     logging.info("Disc identified as data")
 
     if job.label == "" or job.label is None:
@@ -378,29 +378,26 @@ def rip_data(job, datapath, logfile):
     if rip_method == "rsync":
         # need mount point
         fs_utils.mount_device(job.devpath)
-        mountpoint, fs_type, mounted, _ = fs_utils.get_device_mount_point(job.devpath)
+        mountpoint, _, _, mounted = fs_utils.get_device_mount_point(job.devpath)
         if  mounted:
             return rip_data_rsync(job, datapath, mountpoint, logfile)
-            
+
         rip_method = "dd"
-        
     if rip_method != "dd":
-        logging.warning("Unknown data ripping method %s, reverting to dd", rip_method)                            
+        logging.warning("Unknown data ripping method %s, reverting to dd", rip_method)
     return rip_data_dd(job, datapath, logfile)
 
 def rip_data_rsync(job, datapath, mount, logfile):
     rsync_dest = cfg.get("DATA_RIP_RSYNC_DEST")
     if not rsync_dest:
-        rsync_dest =   os.path.join(datapath, job.label)
+        rsync_dest = datapath
     cmd = 'rsync -avz {0} {1}/ {2} 2>> {3}'.format(
          cfg.get("DATA_RIP_RSYNC_OPTS", ""),
          mount,
          rsync_dest,
          logfile
     )
-    
-    logging.debug("Data backup using rsync:",  cmd)
-    
+    logging.debug("Data backup using rsync:%s",  cmd)
     try:
         subprocess.check_output(
             cmd,
@@ -409,8 +406,7 @@ def rip_data_rsync(job, datapath, mount, logfile):
         logging.info("Data rip call successful")
         return True
     except subprocess.CalledProcessError as dd_error:
-        err = "Data rip failed with code: " + str(dd_error.returncode) + "(" + str(dd_error.output) + ")"
-        logging.error(err)
+        logging.error("Data rip failed with code: %s (%s)", str(dd_error.returncode),  str(dd_error.output))
         # sys.exit(err)
 
     return False
@@ -418,7 +414,8 @@ def rip_data_rsync(job, datapath, mount, logfile):
 def rip_data_dd(job, datapath, logfile):
     incomplete_filename = os.path.join(datapath, job.label + ".part")
     final_filename = os.path.join(datapath, job.label + ".iso")
-        
+    # we need the volume to be unmounted
+    fs_utils.unmount_device(job.devpath)
     logging.info("Ripping data disc to: " + incomplete_filename)
 
     # Added from pull 366

@@ -30,6 +30,7 @@ def identify(job, logfile):
     if not os.path.exists(str(job.mountpoint)):
         os.makedirs(str(job.mountpoint))
 
+    
     fs_utils.mount_device(job.devpath)
 
 
@@ -53,8 +54,10 @@ def identify(job, logfile):
             logging.info(f"Disc title Post ident -  title:{job.title} year:{job.year} video_type:{job.video_type} "
                          f"disctype: {job.disctype}")
             logging.debug(f"identify.job.end ---- \n\r{job.pretty_table()}")
-
-    fs_utils.unmount_device(job.devpath)
+            
+    # do not unmount the disc yet
+    if job.disctype != "data":
+        fs_utils.unmount_device(job.devpath)
 
 
 def clean_for_filename(string):
