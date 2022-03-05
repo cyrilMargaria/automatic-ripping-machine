@@ -52,7 +52,7 @@ def check_db_version(install_path, db_file, app):
         created = "alembic_version" in inspector.get_table_names()
         if not created:
             logging.debug("Can't create database file.  This could be a permissions issue.  Exiting...")
-    
+
     # check to see if db is at current revision
     head_revision = script.get_current_head()
     logging.debug("Head is: %s", head_revision)
@@ -63,6 +63,9 @@ def check_db_version(install_path, db_file, app):
     logging.debug("Database version is: %s", db_version)
     if head_revision == db_version:
         logging.info("Database is up to date")
+    elif db_version == "":
+        # Version was not written if the db has just been created
+        c = db.session.execute("INSERT INTO alembic_version (version_num) VALUES (:version)", {"version":head_revision})
     else:
         logging.info(
             "Database out of date. Head is %s  and database is %s.  Upgrading database...",

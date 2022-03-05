@@ -23,20 +23,14 @@ def configure_app():
     if cfg.get("DB_URL"):
         app.config['SQLALCHEMY_DATABASE_URI'] = cfg.get("DB_URL")
     else:
-        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + cfg['DBFILE']
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + cfg['DBFILE']        
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     # We should really gen a key for each system
     app.config['SECRET_KEY'] = "Big secret key"
     # not seen any reference of it
     app.config['LOGIN_DISABLED'] = cfg.get('DISABLE_LOGIN', False)
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'connect_args': {
-            "keepalives": 1,
-            "keepalives_idle": 30,
-            "keepalives_interval": 10,
-            "keepalives_count": 5,
-        }
-    }
+    if cfg.get('SQLALCHEMY_ENGINE_OPTIONS'):
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = cfg.get('SQLALCHEMY_ENGINE_OPTIONS')
     db.init_app(app)
     app.app_context().push()
     db.create_all()

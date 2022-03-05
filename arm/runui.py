@@ -7,6 +7,7 @@ import platform
 
 from arm.ui import app, configure_app  # noqa E402
 from arm.config.config import cfg, webserver_ip_hostname  # noqa E402
+from arm.ripper.logger import setup_py_logging
 import arm.ui.routes  # noqa E402
 
 def main():
@@ -26,6 +27,7 @@ def main():
     env_cfg = os.getenv("ARM_CONFIG_FILE", args.config_file)
     if env_cfg:
         cfg.path = args.config_file.format(hostname=platform.node())
+    setup_py_logging("web-ui", level=args.log_level)
     host = args.ip    
     if not host:
         host, _ = webserver_ip_hostname()       

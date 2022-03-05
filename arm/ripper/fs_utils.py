@@ -163,9 +163,9 @@ class FSEntry(ctypes.Structure):
     def __str__(self):
         return f"dev={self.fs_spec.decode('ascii')} file={self.fs_file.decode('ascii')}"
 
-# POSIX
-libc.getfsent.restype = ctypes.POINTER(FSEntry)        
 def list_mounts():
+    # POSIX
+    libc.getfsent.restype = ctypes.POINTER(FSEntry)    
     libc.setfsent()
     while True:
         x = libc.getfsent()

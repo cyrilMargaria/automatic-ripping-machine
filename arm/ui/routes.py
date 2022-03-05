@@ -124,7 +124,6 @@ def setup_stage2():
     # After a login for is submitted
     form = SetupForm()
     if form.validate_on_submit():
-        app.logger.debug("We valid")
         username = str(request.form['username']).strip()
         pass1 = str(request.form['password']).strip().encode('utf-8')
         hashed = bcrypt.gensalt(12)
@@ -226,13 +225,8 @@ def database():
     """
 
     page = request.args.get('page', 1, type=int)
-    # Check for database file
-    if os.path.isfile(cfg['DBFILE']):
-        jobs = Job.query.order_by(db.desc(Job.job_id)).paginate(page, 100, False)
-    else:
-        app.logger.error('ERROR: /database no database, file doesnt exist')
-        jobs = {}
-
+    # Db should have been created. Query will fail    
+    jobs = Job.query.order_by(db.desc(Job.job_id)).paginate(page, 100, False)
     return render_template('database.html', jobs=jobs.items, date_format=cfg['DATE_FORMAT'], pages=jobs)
 
 
@@ -490,13 +484,9 @@ def history():
 
     """
     page = request.args.get('page', 1, type=int)
-    if os.path.isfile(cfg['DBFILE']):
-        # after roughly 175 entries firefox readermode will break
-        # jobs = Job.query.filter_by().limit(175).all()
-        jobs = Job.query.order_by().paginate(page, 100, False)
-    else:
-        app.logger.error('ERROR: /history database file doesnt exist')
-        jobs = {}
+    # after roughly 175 entries firefox readermode will break
+    # jobs = Job.query.filter_by().limit(175).all()
+    jobs = Job.query.order_by().paginate(page, 100, False)
     app.logger.debug(cfg['DATE_FORMAT'])
 
     return render_template('history.html', jobs=jobs.items, date_format=cfg['DATE_FORMAT'], pages=jobs)
@@ -728,14 +718,11 @@ def home():
         temp = temps['coretemp'][0][1]
     except (KeyError,AttributeError):
         temp = temps = None
-    if os.path.isfile(cfg['DBFILE']):
-        try:
-            jobs = db.session.query(Job).filter(Job.status.notin_(['fail', 'success'])).all()
-        except Exception:
-            # db isnt setup
-            return redirect(url_for('setup'))
-    else:
-        jobs = {}
+    try:
+        jobs = db.session.query(Job).filter(Job.status.notin_(['fail', 'success'])).all()
+    except Exception:
+        # db isnt setup
+        return redirect(url_for('setup'))
 
     return render_template('index.html', freegb=freegb, mfreegb=mfreegb,
                            arm_percent=arm_percent, media_percent=media_percent,

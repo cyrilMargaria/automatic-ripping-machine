@@ -262,15 +262,9 @@ def setup_database():
         except Exception:
             app.logger.debug("couldn't drop all")
         try:
-            #  Recreate everything
-            db.metadata.create_all(db.engine)
-            db.create_all()
-            dbutil.commit()
-            #  push the database version arm is looking for
-            user = AlembicVersion('c54d68996895')
+            # this takes care of the correct DB version 
+            dbutil.check_db_version(cfg['INSTALLPATH'], cfg['DBFILE'], app) 
             ui_config = UISettings(1, 1, "spacelab", "en", 10, 200)
-            db.session.add(ui_config)
-            db.session.add(user)
             dbutil.commit()
             return True
         except Exception:

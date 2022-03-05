@@ -37,7 +37,7 @@ See: https://b3n.org/automatic-ripping-machine
     - Transcoding jobs are asynchronusly batched from ripping
     - Send notifications via IFTTT, Pushbullet, Slack, Discord, and many more!
   - If audio (CD) - rip using abcde (get discdata and album art from [musicbrainz](https://musicbrainz.org/))
-  - If data (Blu-Ray, DVD, or CD) - make an ISO backup
+  - If data (Blu-Ray, DVD, or CD) - make an ISO backup (or rsync) 
 - Headless, designed to be run from a server
 - Can rip from multiple-optical drives in parallel
 - Python Flask UI to interact with ripping jobs, view logs, update jobs, etc
@@ -63,6 +63,16 @@ See: https://b3n.org/automatic-ripping-machine
 For normal install please see the [wiki](https://github.com/1337-server/automatic-ripping-machine/wiki/).
 
 For docker install please see [here](https://github.com/1337-server/automatic-ripping-machine/wiki/docker).
+
+For ui-only Docker image:
+
+`docker build . -t arm-ui:latest` 
+
+Then (if your files are /home/arm
+`docker run  -p 8080:8080 -v /home/arm:/home/arm -v my_arm.yml:/home/arm/etc/arm.yml --rm --name armui -e LOGDEST=stdout arm-ui:latest`
+
+
+
 
 ## Troubleshooting
  Please see the [wiki](https://github.com/1337-server/automatic-ripping-machine/wiki/).

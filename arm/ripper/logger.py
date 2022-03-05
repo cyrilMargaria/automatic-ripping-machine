@@ -68,11 +68,18 @@ class redirectFile(threading.Thread):
             self._logger("Exception in redirectFile thread: %s",e)
             
 
-
-def setuplogging(job, level=None):
-    """Setup logging and return the logger. """
-    # return a logger, so all logs are logged through a logger
-
+def setup_py_logging(logbase, level=None, unique=False):
+    """ 
+     Setup python logging handlers based on the configuration
+      - logbase: job/subsystem we are logging for
+      - level: optional command-line log level
+      - unique: For file, If an existing file exist. create and unique log file name 
+      return has_file, logfile, pipe:
+        - has_file is true if one logger is to a file,
+        - logfile is the full path to the log file 
+        - pipe set to True if a named pipe must be created for helpers programs
+    """
+    
     # Support different destination
     destination = cfg.get("LOGDEST", "FILE")
     log_level = cfg.get('LOGLEVEL', 'INFO')
@@ -82,19 +89,8 @@ def setuplogging(job, level=None):
     log_path = cfg['LOGPATH']
     while log_path and log_path[-1] == "/":
         log_path = log_path[:-1]
-
-    # setup helpful information for the log,
-    # This isnt catching all of them
-    # logbase is the log file name without the.log
-    logbase = "empty"
-    if job.label == "" or job.label is None:
-        if job.disctype == "music":
-            logbase = job.identify_audio_cd()
-    else:
-        logbase = job.label
-        # We need to give the logfile only to database
-    # default to stdout
     #
+    logfile = None
     log_handlers = []
     #  if pipe is set to True, a named pipe will be created
     # and used for the other programs to redirect their log to
@@ -110,9 +106,9 @@ def setuplogging(job, level=None):
             if not os.path.exists(log_path):
                 os.makedirs(log_path)
             # unique filename
-            if os.path.isfile(os.path.join(log_path, "{}.log".format(logbase))):
+            if unique and os.path.isfile(os.path.join(log_path, "{}.log".format(logbase))):
                 # log already exist, generate an unique one
-                logbase = str(job.label) + "_" + str(round(time.time() * 100))
+                logbase = logbase + "_" + str(round(time.time() * 100))
             logfile = "{}.log".format(logbase)
             logfull = os.path.join(log_path, logfile)
             logfile = logfull
@@ -144,8 +140,6 @@ def setuplogging(job, level=None):
             has_file = True
         if log_handler:
             log_handlers.append(log_handler)
-    
-            
     if not log_handlers:
         log_handlers = [logging.StreamHandler(stream=sys.stdout)]
     level = getattr(logging, log_level.upper())
@@ -154,16 +148,32 @@ def setuplogging(job, level=None):
         fmt = '[%(asctime)s] %(levelname)s ARM[{}]: %(module)s.%(funcName)s %(message)s'.format(logbase)
     # force existing logger to be removed, otherwise we do not log
     logging.basicConfig(format=fmt, handlers=log_handlers, force=True, datefmt='%Y-%m-%d %H:%M:%S', level=level)
+    return has_file, logfile, pipe
+
+            
+def setuplogging(job, level=None):
+    """Setup logging and return the logger. """
+    # setup helpful information for the log,
+    # This isnt catching all of them
+    # logbase is the log file name without the.log
+    logbase = "empty"
+    if job.label == "" or job.label is None:
+        if job.disctype == "music":
+            logbase = job.identify_audio_cd()
+    else:
+        logbase = job.label
+        # We need to give the logfile only to database
+    has_file, logfile, pipe = setup_py_logging(logbase, level=level, unique=True)
+
     if pipe and not has_file:
         logger = logging.getLogger("arm")
         # Make it configurable if needed
         localpipe = random_pipe("/tmp")
         logfile = localpipe
         logger.info("Local pipe %s will be used for log redirection", localpipe)
-        # 
         r = redirectFile(logger.debug, localpipe)
         r.start()
-    job.logfile = logfile        
+    job.logfile = logfile
     # This stops apprise spitting our secret keys when users posts online
     logging.getLogger("apprise").setLevel(logging.WARN)
     logging.getLogger("requests").setLevel(logging.WARN)
