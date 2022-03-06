@@ -1,0 +1,3 @@
+#!/bin/sh
+device=$(drutil status  | grep -o /dev/disk.*)
+arm -c ~/.arm.yml -d ${device}
