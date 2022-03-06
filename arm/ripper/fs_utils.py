@@ -128,7 +128,12 @@ def unmount_device(devpath):
 def eject_device(devpath):
     devpath = check_device_path(devpath)
     if platform.system() == 'Darwin':
-        return os.system(f"diskutil eject {devpath} 0")
+        mount, fs_type, uuid, mounted = get_device_mount_point(devpath)
+        if mounted:
+            os.system(f"diskutil unmountDisk {devpath}")
+        if os.system(f"diskutil eject {devpath} 0"):
+            return True
+        return os.system(f"drutil eject {devpath}")
     try:
         if os.system("umount " + devpath):
             logging.debug("we unmounted disc %s", devpath)

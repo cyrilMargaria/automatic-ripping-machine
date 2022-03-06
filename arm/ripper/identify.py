@@ -30,8 +30,9 @@ def identify(job, logfile):
     if not os.path.exists(str(job.mountpoint)):
         os.makedirs(str(job.mountpoint))
 
-    
-    fs_utils.mount_device(job.devpath)
+    _, _, _, mounted = fs_utils.get_device_mount_point(job.devpath)
+    if not mounted:
+        fs_utils.mount_device(job.devpath)
 
 
     # Check with the job class to get the correct disc type
@@ -56,7 +57,7 @@ def identify(job, logfile):
             logging.debug(f"identify.job.end ---- \n\r{job.pretty_table()}")
             
     # do not unmount the disc yet
-    if job.disctype != "data":
+    if job.disctype != "data" and not mounted:
         fs_utils.unmount_device(job.devpath)
 
 

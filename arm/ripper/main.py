@@ -3,6 +3,7 @@
 import sys
 import argparse  # noqa: E402
 import os  # noqa: E402
+import os.path
 import logging  # noqa: E402
 import time  # noqa: E402
 import datetime  # noqa: E402
@@ -247,14 +248,18 @@ def main(logfile, job):
 
         # Use FFMPeg to convert Large Poster if enabled in config
         if job.disctype == "dvd" and cfg["RIP_POSTER"]:
-            fs_utils.mount_device(job.devpath)
+            _, _, _, mounted = fs_utils.get_device_mount_point(job.devpath)
+            if not mounted:
+                fs_utils.mount_device(job.devpath)
             if os.path.isfile(job.mountpoint+"/JACKET_P/J00___5L.MP2"):
                 logging.info("Converting NTSC Poster Image")
                 os.system('ffmpeg -i "'+job.mountpoint+'/JACKET_P/J00___5L.MP2" "'+hb_out_path+'/poster.png"')
             elif os.path.isfile(job.mountpoint+"/JACKET_P/J00___6L.MP2"):
                 logging.info("Converting PAL Poster Image")
                 os.system('ffmpeg -i "'+job.mountpoint+'/JACKET_P/J00___6L.MP2" "'+hb_out_path+'/poster.png"')
-            fs_utils.unmount_device(job.devpath)
+            # FS wants it mounted, keep it mounted
+            if not mounted:
+                fs_utils.unmount_device(job.devpath)
 
         logging.info(f"Processing files to: {hb_out_path}")
         mkvoutpath = None
@@ -431,8 +436,10 @@ def cli():
     env_cfg = os.getenv("ARM_CONFIG_FILE", args.config_file)
     if env_cfg:
         cfg.path = args.config_file.format(hostname=platform.node(), devpath=args.devpath)
-    arm.ui.configure_app()    
-    devpath = "/dev/" + args.devpath
+    arm.ui.configure_app()
+    devpath = args.devpath
+    if not os.path.exists(devpath):
+        devpath = "/dev/" + args.devpath
     job = Job(devpath)
     logfile = logger.setuplogging(job, level=args.log_level)
     log = logging.getLogger("arm")
