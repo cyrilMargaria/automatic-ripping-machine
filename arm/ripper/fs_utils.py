@@ -1,6 +1,7 @@
 import os.path
 import ctypes
 import ctypes.util
+import re
 import collections
 import platform
 import logging
@@ -25,7 +26,6 @@ def get_device_mount_point(device):
        returns the device mount point, fs type, and true/false to
        indicate if the device is mounted.
     """
-    # TODO: linux
     if platform.system() == 'Darwin':
         mounts = list_mounts_darwin()
         logging.debug("Mounts: %r", mounts)
@@ -35,7 +35,15 @@ def get_device_mount_point(device):
         return None, None, None, False
     # TODO: linux
     if platform.system() == 'Linux':
-        mount = os.path.join(cfg.get("MOUNTPATH", "/mnt"), os.path.basename(device))
+        # mount = os.path.join(cfg.get("MOUNTPATH", "/mnt"), os.path.basename(device))
+        for mnt in list_mounts():
+            if mnt.src == device:
+                mounted = False
+                with open("/proc/mounts", "r") as mnts:
+                    mounted = bool([True for x in mnts.readlines() if x.startswith(device) and x.split(" ")[0] == device])
+                return mnt.dst, "", "" , mounted            
+        return None, None, None, False
+
         # TODOq
     raise ValueError("Not implemented")
 
@@ -49,15 +57,16 @@ def get_device_info(devpath):
     mount = None
     disctype = "unknown"
     label = ""
-    if platform.system() == 'Darwin':
-        mount, fs_type, uuid, _ = get_device_mount_point(devpath)
+    mount, fs_type, uuid, _ = get_device_mount_point(devpath)
+    if platform.system() == 'Darwin':        
         if not mount:
             return mount, label, disctype
         disctype = OSX_MOUNT_TO_TYPE.get(fs_type, "unknown")
         label = "{}-{}".format(os.path.basename(mount), uuid)
         return mount, label, disctype
     # linux/default
-    mount = os.path.join(cfg.get("MOUNTPATH", "/mnt"), devpath)
+    
+    # mount = os.path.join(cfg.get("MOUNTPATH", "/mnt"), devpath)
     # print("Entering disc")
     context = pyudev.Context()
     device = pyudev.Devices.from_device_file(context, devpath)
@@ -75,7 +84,7 @@ def get_device_info(devpath):
     return mount, label, disctype
 
 
-def check_fstab():
+def check_fstab(job):
     logging.info("Checking for fstab entry.")
     if platform.system() != 'Linux':
         return
@@ -166,20 +175,25 @@ class FSEntry(ctypes.Structure):
     ]
 
     def __str__(self):
-        return f"dev={self.fs_spec.decode('ascii')} file={self.fs_file.decode('ascii')}"
+        return f"dev={self.fs_spec.decode('ascii')} file={self.fs_file.decode('ascii')}  type={self.fs_vfstype.decode('ascii')}"
 
+
+Mount = collections.namedtuple("Mount", "src dst fs_type fs_uuid")
+
+    
 def list_mounts():
     # POSIX
     libc.getfsent.restype = ctypes.POINTER(FSEntry)    
     libc.setfsent()
+    result = []
     while True:
         x = libc.getfsent()
         if not x:
             print("EOL")
             libc.endfsent()
-            return
-        print(str(x.contents))
-    return
+            return result
+        result.append(Mount(x.contents.fs_spec.decode('ascii'), x.contents.fs_file.decode('ascii'), "", ""))
+    return result
 
 
 class fsid(ctypes.Structure):
@@ -208,7 +222,6 @@ class StatFS(ctypes.Structure):
     ]
 
 
-Mount = collections.namedtuple("Mount", "src dst fs_type fs_uuid")
 
 if platform.system() == 'Darwin':
     try:

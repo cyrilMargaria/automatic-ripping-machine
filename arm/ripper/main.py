@@ -199,7 +199,7 @@ def main(logfile, job):
         logging.info("No manual override found.")
 
     log_arm_params(job)
-    fs_utils.check_fstab()
+    fs_utils.check_fstab(job)
     grabkeys(cfg["HASHEDKEYS"])
 
     # Entry point for dvd/bluray
