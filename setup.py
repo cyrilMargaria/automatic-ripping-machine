@@ -1,12 +1,14 @@
 from setuptools import setup, find_packages
 from os.path import join, isfile
 import glob
+import re
 
-def globm(*args):
+def globm(*args, exclude=set()):
     """ glob multiple patterns"""
     r = []
+    exclude = [ re.compile(x) for x in exclude]
     for a in args:
-        r.extend(glob.glob(a))
+        r.extend([ x for x in glob.glob(a) if len([True for z in exclude if z.match(x)]) == 0])
     return r
                  
 setup(
@@ -61,8 +63,8 @@ setup(
 
     # Package data: MANIFEST.in
     data_files=[
-        ('share/doc/arm', globm('docs/*', 'setup/*')),
-        ('share/doc/arm-scripts', globm('scripts/*')),
+        ('share/doc/arm', globm('docs/*', 'setup/*', exclude=["PSDs"])),
+        ('share/doc/arm-scripts', globm('scripts/*', exclude=[".*\.app"])),
     ],  # Optional
     entry_points={'console_scripts': [
         'arm = arm.ripper.main:cli',
