@@ -304,7 +304,7 @@ def get_cdrom_status(devpath):
         # Sometimes ARM will log errors opening hard drives. this check should stop it
         if not re.search(r'hd[a-j]|sd[a-j]|loop[0-9]', devpath):
             logging.info(f"Failed to open device {devpath} to check status.")
-        exit(2)
+        return -1
     result = fcntl.ioctl(fd, 0x5326, 0)
 
     return result

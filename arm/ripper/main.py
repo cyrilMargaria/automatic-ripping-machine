@@ -29,6 +29,7 @@ def parse_args():
     """ Parse_Args to program, parses arguments"""
     parser = argparse.ArgumentParser(description='Process disc using ARM')
     parser.add_argument('-d', '--devpath', help='Device path ', required=True)
+    parser.add_argument('-w', '--wait', dest='wait', action="store_true", help='Wait for device to be present')
     parser.add_argument('-L', dest='log_level', help="log level", default="INFO")
     parser.add_argument('-c', dest='config_file', help="""
        configuration file, can be also set in environment var ARM_CONFIG_FILE.
@@ -440,6 +441,10 @@ def cli():
     devpath = args.devpath
     if not os.path.exists(devpath):
         devpath = "/dev/" + args.devpath
+    if args.wait:
+        while 4 != utils.get_cdrom_status(devpath):
+            time.sleep(10)
+            
     job = Job(devpath)
     logfile = logger.setuplogging(job, level=args.log_level)
     log = logging.getLogger("arm")
