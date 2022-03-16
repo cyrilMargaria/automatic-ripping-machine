@@ -117,6 +117,8 @@ class Job(db.Model):
         else:
             logging.debug("Did not find valid dvd/bd files. Changing disctype to 'data'")
             self.disctype = "data"
+            self.title_auto = f"Data-{self.label}"
+            self.year_auto = ""
 
     def identify_audio_cd(self):
         """
@@ -168,7 +170,7 @@ class Job(db.Model):
     def eject(self):
         """Eject disc if it hasn't previously been ejected"""
         self.ejected = bool(fs_utils.eject_device(self.devpath))
-        
+
     def write_metadata(self, destination):
         """ Write metadata to file and to the file(s) themselves"""
         try:
@@ -185,8 +187,8 @@ class Job(db.Model):
                     metadata[att] = data
             json.dump(metadata, f, indent=2)
         except Exception as e:
-            logger.warning("Could not write %s metadata: %s", job.label, e)
-        pass
+            logger.warning("Could not write %s metadata: %s", self.label, e)
+
 
 class Track(db.Model):
     """ represents a track """

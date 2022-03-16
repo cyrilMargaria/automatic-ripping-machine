@@ -58,10 +58,13 @@ class redirectFile(threading.Thread):
             self._running = True
             self._pipe = open(self._pipename, "r")
             while not self._stop.is_set():
-                line = self._pipe.readline()
-                if line:
-                    self._logger(line.strip())
-                else:
+                try:
+                    line = self._pipe.readline()
+                    if line:
+                        self._logger(line.strip())
+                    else:
+                        self._stop.wait(1)
+                except Exception:
                     self._stop.wait(1)
         except Exception as e:
             self._running = False

@@ -175,12 +175,15 @@ def main(logfile, job):
     utils.notify_entry(job)
 
     #  If we have have waiting for user input enabled
-    if cfg["MANUAL_WAIT"]:
-        logging.info(f"Waiting {cfg['MANUAL_WAIT_TIME']} seconds for manual override.")
+    wait_user_input = cfg["MANUAL_WAIT"]
+    if job.disctype == "data" and cfg.get("MANUAL_WAIT_DATA"):
+        wait_user_input = cfg.get("MANUAL_WAIT_DATA")
+    if wait_user_input:
+        logging.info(f"Waiting {wait_user_input} seconds for manual override.")
         job.status = "waiting"
         dbutil.commit()
         sleep_time = 0
-        while sleep_time < cfg["MANUAL_WAIT_TIME"]:
+        while sleep_time < wait_user_input:
             time.sleep(5)
             sleep_time += 5
             db.session.refresh(job)

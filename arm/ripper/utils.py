@@ -391,7 +391,7 @@ def rip_data_rsync(job, datapath, mount, logfile):
     rsync_dest = cfg.get("DATA_RIP_RSYNC_DEST")
     if not rsync_dest:
         rsync_dest = datapath
-    cmd = 'rsync -avz {0} {1}/ {2} 2>> {3}'.format(
+    cmd = 'rsync -avz {0} {1}/ {2}  2>&1 1>> {3}'.format(
          cfg.get("DATA_RIP_RSYNC_OPTS", ""),
          mount,
          rsync_dest,
