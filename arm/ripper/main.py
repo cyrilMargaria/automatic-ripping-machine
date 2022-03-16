@@ -447,7 +447,7 @@ def cli():
     if args.wait:
         while 4 != utils.get_cdrom_status(devpath):
             time.sleep(10)
-            
+    
     job = Job(devpath)
     logfile = logger.setuplogging(job, level=args.log_level)
     log = logging.getLogger("arm")

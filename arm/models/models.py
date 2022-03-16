@@ -285,7 +285,8 @@ class Config(db.Model):
     PO_USER_KEY = db.Column(db.String(64))
     PO_APP_KEY = db.Column(db.String(64))
     OMDB_API_KEY = db.Column(db.String(64))
-
+    ARM_NAME = db.Column(db.String(256))
+    
     def __init__(self, c, job_id):
         self.__dict__.update(c)
         self.job_id = job_id

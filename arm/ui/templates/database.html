@@ -130,7 +130,8 @@
                                 {% endif %}
                             </div>
                             <div class="col-lg-4">
-                                <div class="card-body px-1 py-1">
+                              <div class="card-body px-1 py-1">
+                                    <strong>Host:</strong>  {{ job.host }} <br>
                                     <strong>Type: </strong> {{ job.video_type }} <br>
                                     {% if not job.title_manual %}
                                     <strong>Year: </strong>({{ job["year"] }})<br>

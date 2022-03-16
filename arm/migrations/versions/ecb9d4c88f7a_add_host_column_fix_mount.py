@@ -18,8 +18,11 @@ depends_on = None
 
 def upgrade():
     op.add_column('job', sa.Column('host', sa.String(length=256), nullable=True))
+    op.add_column('config', sa.Column('ARM_NAME', sa.String(length=256), nullable=True))
+
     op.alter_column('job','mountpoint', type_=sa.String(length=256))
 
 def downgrade():
     op.drop_column('job', 'host')
+    op.drop_column('job', 'ARM_NAME')
     op.alter_column('job', 'mountpoint', type_=sa.String(length=20))
