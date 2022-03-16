@@ -310,7 +310,7 @@ function refreshJobs() {
             success: function (data) {
                 $.each(data.results, function (index, job) {
                     job.job_id = server_index+"_"+job.job_id;
-                    job.ripper = data.arm_name ? data.arm_name : "";
+                    job.ripper = job.config.ARM_NAME ? job.config.ARM_NAME : "";
 
                     if (activeJobs.some(e => e.job_id === job.job_id)) {
                         var oldJob = activeJobs.find(e => e.job_id === job.job_id);

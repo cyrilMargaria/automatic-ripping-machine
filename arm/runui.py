@@ -35,6 +35,8 @@ def main():
     if not port:
         port = cfg['WEBSERVER_PORT']
     configure_app()
+    for path in ["TRANSCODE_PATH", "COMPLETED_PATH", "RAW_PATH", "DATA_PATH"]:
+        os.makedirs(cfg[path], exist_ok=True)
     app.run(host=host, port=port, debug=True)
     # app.run(debug=True)
 

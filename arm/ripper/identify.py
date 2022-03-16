@@ -59,6 +59,7 @@ def identify(job, logfile):
     # do not unmount the disc yet
     if job.disctype != "data" and not mounted:
         fs_utils.unmount_device(job.devpath)
+    
 
 
 def clean_for_filename(string):

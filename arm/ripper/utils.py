@@ -391,7 +391,7 @@ def rip_data_rsync(job, datapath, mount, logfile):
     rsync_dest = cfg.get("DATA_RIP_RSYNC_DEST")
     if not rsync_dest:
         rsync_dest = datapath
-    cmd = 'rsync -avz {0} {1}/ {2} 2>> {3}'.format(
+    cmd = 'rsync -avz {0} {1}/ {2}  2>&1 1>> {3}'.format(
          cfg.get("DATA_RIP_RSYNC_OPTS", ""),
          mount,
          rsync_dest,
@@ -581,9 +581,13 @@ def database_adder(obj_class):
 
 
 def clean_old_jobs():
-    a_jobs = db.session.query(m.Job).filter(m.Job.status.notin_(['fail', 'success'])).all()
+    """ cleanup old jobs for this instance"""
+    a_jobs = db.session.query(m.Job).filter(m.Job.status.notin_(['fail', 'success']), m.Job.host == platform.node()).all()    
     # Clean up abandoned jobs
     for j in a_jobs:
+        config = db.session.query(m.Config).filter(m.Config.job_id == j.job_id).first()
+        if config and config.ARM_NAME != cfg['ARM_NAME']:
+            continue
         if psutil.pid_exists(j.pid):
             p = psutil.Process(j.pid)
             if j.pid_hash == hash(p):

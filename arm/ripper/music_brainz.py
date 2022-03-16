@@ -75,8 +75,8 @@ def music_brainz(discid, job):
         }
         u.database_updater(args, job)
         logging.debug("musicbrain works -  New title is " + title + ".  New Year is: " + new_year)
-    except mb.WebServiceError as exc:
-        logging.error("Cant reach MB or cd not found ? - ERROR: " + str(exc))
+    except (mb.WebServiceError, KeyError):
+        logging.error("Cant reach MB or cd not found ? ")
         u.database_updater(False, job)
         return ""
     try:
@@ -136,6 +136,7 @@ def get_title(discid, job):
     mb.set_useragent("arm", "v1.0")
     try:
         infos = mb.get_releases_by_discid(discid, includes=['artist-credits'])
+        
         title = str(infos['disc']['release-list'][0]['title'])
         # Start setting our db stuff
         artist = str(infos['disc']['release-list'][0]['artist-credit'][0]['artist']['name'])
@@ -148,7 +149,7 @@ def get_title(discid, job):
         }
         u.database_updater(args, job)
         return clean_title
-    except mb.WebServiceError:
+    except (mb.WebServiceError, KeyError):
         u.database_updater(False, job)
         return "not identified"
 

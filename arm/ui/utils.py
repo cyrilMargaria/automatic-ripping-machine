@@ -401,9 +401,11 @@ def get_x_jobs(job_status):
             if key != "config":
                 r[i][str(key)] = str(value)
             # logging.debug(str(key) + "= " + str(value))
+        if isinstance(r[i]['config'], dict) and not r[i]['config'].get('ARM_NAME'):
+            r[i]['config']['ARM_NAME'] = cfg['ARM_NAME']
         i += 1
     if jobs:
-        app.logger.debug("jobs  - we have " + str(len(r)) + " jobs")
+        app.logger.debug("jobs  - we have %d jobs", len(r))
         success = True
 
     return {"success": success, "mode": job_status, "results": r, "arm_name": cfg['ARM_NAME']}
