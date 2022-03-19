@@ -175,7 +175,9 @@ def main(logfile, job):
     utils.notify_entry(job)
 
     #  If we have have waiting for user input enabled
-    wait_user_input = cfg["MANUAL_WAIT"]
+    wait_user_input = 0
+    if cfg["MANUAL_WAIT"]:
+        wait_user_input = cfg["MANUAL_WAIT_TIME"]
     if job.disctype == "data" and cfg.get("MANUAL_WAIT_DATA"):
         wait_user_input = cfg.get("MANUAL_WAIT_DATA")
     if wait_user_input:
