@@ -344,14 +344,25 @@ def rip_music(job, logfile):
             cmd = f'abcde -d "{job.devpath}" >> "{logfile}" 2>&1'
 
         logging.debug(f"Sending command: {cmd}")
-
+        cur_pwd = os.getcwd()
+        # change to target dir, plus title to make sure there is no duplicated Unknown artist
         try:
+            audio_dir = os.path.join(cfg.get("AUDIO_PATH", cur_pwd),f"{job.title} ({job.year})")
+            os.makedirs(audio_dir, exist_ok=True)
+            set_permissions(job, audio_dir)
+            os.chdir(audio_dir)
             subprocess.check_output(cmd, shell=True).decode("utf-8")
+            os.chdir(cur_pwd)
             logging.info("abcde call successful")
             return True
         except subprocess.CalledProcessError as ab_error:
             err = f"Call to abcde failed with code: {ab_error.returncode} ({ab_error.output})"
             logging.error(err)
+        except Exception as e:
+            err = f"Call to abcde failed with code: {e}"
+            logging.error(err)
+        os.chdir(cur_pwd)
+
     return False
 
 

@@ -113,6 +113,9 @@ RIP_POSTER: false
 # This over-rides any other abcde.conf files
 ABCDE_CONFIG_FILE: "/etc/abcde.conf"
 
+# Optional: destination folder for audio output. 
+# For single machine: it can be configured in abcde.conf, for multi-rip machine it can be set per ripper 
+# AUDIO_PATH: "/home/arm/media/audio"
 # Path to raw MakeMKV directory and data disk dump
 # Destination for MakeMKV and source for HandBrake
 RAW_PATH: "/home/arm/media/raw/"
