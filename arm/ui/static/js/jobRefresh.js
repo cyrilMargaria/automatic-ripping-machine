@@ -180,9 +180,11 @@ function addJobItem(job) {
               <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="abandon" data-jobid="' + idsplit[1] + '" data-href="json?job=' + idsplit[1] + '&mode=abandon">Abandon Job</button>\
               <a href="logs?logfile=' + job.logfile + '&mode=full" class="btn btn-primary">View logfile</a>';
     if (job.video_type !== "Music") {
-        x += '<a href="titlesearch?job_id=' + idsplit[1] + '" class="btn btn-primary">Title Search</a>\
-              <a href="customTitle?job_id=' + idsplit[1] + '" class="btn btn-primary">Custom Title</a>\
-              <a href="changeparams?config_id=' + idsplit[1]+ '" class="btn btn-primary">Edit Settings</a>';
+        x += '<a href="titlesearch?job_id=' + idsplit[1] + '" class="btn btn-primary">Title Search</a>';
+    }
+    x +='<a href="customTitle?job_id=' + idsplit[1] + '" class="btn btn-primary">Custom Title</a>';
+    if (job.video_type !== "Music") {    
+        x+='<a href="changeparams?config_id=' + idsplit[1]+ '" class="btn btn-primary">Edit Settings</a>';
     }
     x += '</div>\
                                 </div>\
